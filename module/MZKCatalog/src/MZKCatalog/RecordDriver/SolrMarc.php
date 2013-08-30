@@ -24,8 +24,7 @@ class SolrMarc extends ParentSolrDefault
     
     public function getEOD()
     {
-    	$eod = $this->getFirstFieldValue('EOD', array('a'));
-    	return ($eod == 'Y')?true:false;
+        $eod = $this->getFirstFieldValue('EOD', array('a'));
+        return ($eod == 'Y')?true:false;
     }
-
 }
