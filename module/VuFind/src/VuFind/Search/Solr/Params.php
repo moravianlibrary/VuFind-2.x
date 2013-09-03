@@ -26,6 +26,7 @@
  * @link     http://www.vufind.org  Main Page
  */
 namespace VuFind\Search\Solr;
+use VuFindSearch\ParamBag;
 
 /**
  * Solr Search Parameters
@@ -65,7 +66,14 @@ class Params extends \VuFind\Search\Base\Params
      * @var string
      */
     protected $facetSort = null;
-
+    
+    /**
+     * array of multi facets (Results_Settings->multiselect_facets in facets.ini)
+     * 
+     * @var array
+     */
+    protected $multiSelectFacets = array();
+    
     /**
      * Constructor
      *
@@ -83,6 +91,10 @@ class Params extends \VuFind\Search\Base\Params
         ) {
             $this->setFacetLimit($config->Results_Settings->facet_limit);
         }
+        
+        if (isset($config->Results_Settings->multiselect_facets) ) {
+            $this->setMultiselectFacets($config->Results_Settings->multiselect_facets);
+        }
     }
 
     /**
@@ -94,17 +106,32 @@ class Params extends \VuFind\Search\Base\Params
     {
         // Define Filter Query
         $filterQuery = $this->getOptions()->getHiddenFilters();
+        $orFilterQuery = array();
         foreach ($this->filterList as $field => $filter) {
             foreach ($filter as $value) {
                 // Special case -- allow trailing wildcards and ranges:
                 if (substr($value, -1) == '*'
                     || preg_match('/\[[^\]]+\s+TO\s+[^\]]+\]/', $value)
                 ) {
-                    $filterQuery[] = $field.':'.$value;
+                    if (in_array($field,$this->multiSelectFacets)) {
+                        $orFilterQuery[$fileld][] = $field.':'.$value;
+                    } else {
+                        $filterQuery[] = $field.':'.$value;
+                    }
                 } else {
-                    $filterQuery[] = $field.':"'.addcslashes($value, '"\\').'"';
+                    if (in_array($field,$this->multiSelectFacets)) {
+                        $orFilterQuery[$field][]  = $field.':"'.addcslashes($value, '"\\').'"';
+                    } else {
+                        $filterQuery[] = $field.':"'.addcslashes($value, '"\\').'"';
+                    }
                 }
             }
+        }
+        
+        if (!empty($orFilterQuery) ) {
+            foreach ($orFilterQuery as $filter => $value) {
+               $filterQuery[] = '{!tag='.$filter.'_filter}'. implode(' OR ', $value); 
+           }
         }
         return $filterQuery;
     }
@@ -121,7 +148,11 @@ class Params extends \VuFind\Search\Base\Params
         if (!empty($this->facetConfig)) {
             $facetSet['limit'] = $this->facetLimit;
             foreach ($this->facetConfig as $facetField => $facetName) {
-                $facetSet['field'][] = $facetField;
+                if (in_array($facetField, $this->multiSelectFacets)) {
+                   $facetSet['field'][] = '{!ex=' . $facetField . '_filter}' . $facetField;
+                } else {
+                    $facetSet['field'][] = $facetField;
+                }
             }
             if ($this->facetOffset != null) {
                 $facetSet['offset'] = $this->facetOffset;
@@ -208,6 +239,11 @@ class Params extends \VuFind\Search\Base\Params
     public function setFacetSort($s)
     {
         $this->facetSort = $s;
+    }
+    
+    public function setMultiselectFacets ($multiselectFacets) {
+        $this->multiSelectFacets = explode(',', $multiselectFacets);
+
     }
 
     /**
@@ -372,5 +408,106 @@ class Params extends \VuFind\Search\Base\Params
         $config = $this->getServiceLocator()->get('VuFind\Config')->get('config');
         return isset($config->Index->maxBooleanClauses)
             ? $config->Index->maxBooleanClauses : 1024;
+    }
+
+    /**
+     * Normalize sort parameters.
+     *
+     * @param string $sort Sort parameter
+     *
+     * @return string
+     */
+    protected function normalizeSort($sort)
+    {
+        static $table = array(
+            'year' => array('field' => 'publishDateSort', 'order' => 'desc'),
+            'publishDateSort' =>
+                array('field' => 'publishDateSort', 'order' => 'desc'),
+            'author' => array('field' => 'authorStr', 'order' => 'asc'),
+            'title' => array('field' => 'title_sort', 'order' => 'asc'),
+            'relevance' => array('field' => 'score', 'order' => 'desc'),
+            'callnumber' => array('field' => 'callnumber', 'order' => 'asc'),
+        );
+        $normalized = array();
+        foreach (explode(',', $sort) as $component) {
+            $parts = explode(' ', trim($component));
+            $field = reset($parts);
+            $order = next($parts);
+            if (isset($table[$field])) {
+                $normalized[] = sprintf(
+                    '%s %s',
+                    $table[$field]['field'],
+                    $order ?: $table[$field]['order']
+                );
+            } else {
+                $normalized[] = sprintf(
+                    '%s %s',
+                    $field,
+                    $order ?: 'asc'
+                );
+            }
+        }
+        return implode(',', $normalized);
+    }
+
+    /**
+     * Create search backend parameters for advanced features.
+     *
+     * @return ParamBag
+     */
+    public function getBackendParameters()
+    {
+        $backendParams = new ParamBag();
+
+        // Spellcheck
+        $backendParams->set(
+            'spellcheck', $this->getOptions()->spellcheckEnabled() ? 'true' : 'false'
+        );
+
+        // Facets
+        $facets = $this->getFacetSettings();
+        if (!empty($facets)) {
+            $backendParams->add('facet', 'true');
+            foreach ($facets as $key => $value) {
+                $backendParams->add("facet.{$key}", $value);
+            }
+            $backendParams->add('facet.mincount', 1);
+        }
+
+        // Filters
+        $filters = $this->getFilterSettings();
+        foreach ($filters as $filter) {
+            $backendParams->add('fq', $filter);
+        }
+
+        // Shards
+        $allShards = $this->getOptions()->getShards();
+        $shards = $this->getSelectedShards();
+        if (is_null($shards)) {
+            $shards = array_keys($allShards);
+        }
+
+        // If we have selected shards, we need to format them:
+        if (!empty($shards)) {
+            $selectedShards = array();
+            foreach ($shards as $current) {
+                $selectedShards[$current] = $allShards[$current];
+            }
+            $shards = $selectedShards;
+            $backendParams->add('shards', implode(',', $selectedShards));
+        }
+
+        // Sort
+        $sort = $this->getSort();
+        if ($sort) {
+            $backendParams->add('sort', $this->normalizeSort($sort));
+        }
+
+        // Highlighting -- on by default, but we should disable if necessary:
+        if (!$this->getOptions()->highlightEnabled()) {
+            $backendParams->add('hl', 'false');
+        }
+
+        return $backendParams;
     }
 }
