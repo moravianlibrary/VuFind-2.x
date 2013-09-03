@@ -198,8 +198,8 @@
         <tr>
           <td>
             <a href="http://books2ebooks.eu/odm/orderformular.do?formular_id=131&sys_id=<?=$sys_no?>" target="blank">
-              <?/*TODO: Choose image by current language*/?>                    
-              <img src="<?=$this->imageLink('eod_button_cz.gif')?>">
+              <? $userLang = $this->layout()->userLang;?>      
+              <img src="<?=$this->imageLink("eod_button_$userLang.gif")?>">
             </a>
           </td>
           <td>&nbsp;&nbsp;</td>
