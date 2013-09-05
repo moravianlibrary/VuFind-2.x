@@ -27,6 +27,7 @@
  */
 namespace VuFind\Controller;
 use VuFind\Exception\Mail as MailException,
+    VuFind\Exception\RecordMissing as RecordMissingException,
     Zend\Session\Container as SessionContainer;
 
 /**
@@ -199,20 +200,27 @@ class AbstractRecord extends AbstractBase
      */
     public function homeAction()
     {
-        // Set up default tab (first fixing it if it is invalid):
-        $tabs = $this->getAllTabs();
-        if (!isset($tabs[$this->defaultTab])) {
-            $keys = array_keys($tabs);
-            $this->defaultTab = isset($keys[0]) ? $keys[0] : null;
-        }
+        try {
+            // Set up default tab (first fixing it if it is invalid):
+            $tabs = $this->getAllTabs();
+            if (!isset($tabs[$this->defaultTab])) {
+                $keys = array_keys($tabs);
+                $this->defaultTab = isset($keys[0]) ? $keys[0] : null;
+            }
 
-        // Save statistics:
-        if ($this->logStatistics) {
-            $this->getServiceLocator()->get('VuFind\RecordStats')
+            // Save statistics:
+            if ($this->logStatistics) {
+                $this->getServiceLocator()->get('VuFind\RecordStats')
                 ->log($this->loadRecord(), $this->getRequest());
-        }
+            }
+             
+            $return = $this->showTab($this->params()->fromRoute('tab', $this->defaultTab));
+        } catch (RecordMissingException $e) {
+            //redirection to MissingRecordController
+            $return = $this->forwardTo('missingrecord', 'home');
 
-        return $this->showTab($this->params()->fromRoute('tab', $this->defaultTab));
+        }
+        return $return;
     }
 
     /**
