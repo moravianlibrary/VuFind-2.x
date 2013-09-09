@@ -85,10 +85,17 @@
                         <dl class="narrowList navmenu offscreen" id="narrowGroupHidden_<?=$this->escapeHtml($title)?>">
                     <? endif; ?>
                     <? if ($thisFacet['isApplied']): ?>
-                        <dd><a href="<?=$removedFilterLinks[$thisFacet['value']]?>"><input type="checkbox" name="checkbox" checked="checked" value="<?=$this->escapeHtml($thisFacet['displayText'])?>"/></a><?=$this->escapeHtml($thisFacet['displayText'])?></dd>
+                        <dd>
+                           <input type="checkbox" name="filter[]" value="<?=$this->escapeHtml($thisFacet['displayText'])?>"
+                            checked="checked" onclick="window.location.href='<?=$removedFilterLinks[$thisFacet['value']] ?>';" />
+                            <?=$this->transEsc($thisFacet['displayText'])?>
+                       </dd>
                     <? else: ?>
-                        <dd><a href="<?=$this->currentPath().$results->getUrlQuery()->addFacet($title, $thisFacet['value'])?>">
-                        <input type="checkbox" name="checkbox" value="<?=$this->escapeHtml($thisFacet['displayText'])?>"/><?=$this->escapeHtml($thisFacet['displayText'])?></a> (<?=$this->escapeHtml($thisFacet['count'])?>)</dd>
+                        <dd>
+                           <input type="checkbox" name="filter[]" value="<?=$this->escapeHtml($thisFacet['displayText'])?>"
+                            onclick="window.location.href='<?=$this->currentPath().$results->getUrlQuery()->addFacet($title, $thisFacet['value'])?>'"/>
+                           <a href="<?=$this->currentPath().$results->getUrlQuery()->addFacet($title, $thisFacet['value'])?>'"> <?=$this->escapeHtml($thisFacet['displayText'])?></a> (<?=$this->escapeHtml($thisFacet['count'])?>)
+                       </dd>
                     <? endif; ?>
                <? endforeach; ?>
           <? else: ?>
