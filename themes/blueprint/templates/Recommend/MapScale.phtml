@@ -1,5 +1,5 @@
 <? if($this->recommend->isActive()): ?>
-  <form name="scale_int_mvFilter" id="scale_int_mvFilter">
+  <form name="<?= $this->recommend->getFilterName() ?>Filter" id="<?= $this->recommend->getFilterName() ?>Filter">
     <? /* Insert actual GET params */ ?>
     <? foreach($this->recommend->getParams() as $paramName => $paramValue): ?>
       <? if(is_array($paramValue)): ?>
@@ -7,27 +7,28 @@
           <input type="hidden" name="<?= htmlspecialchars($paramName) ?>[]" value="<?= htmlspecialchars($paramSubValue) ?>">
         <? endforeach; ?>
       <? else: ?>
-        <? /* Check if this parameter is our map scale */ ?>
-        <? if($paramName == 'scale_int_mvfrom'): ?>
-          <? $from = $paramValue; ?>
-        <? elseif($paramName == 'scale_int_mvto'): ?>
-          <? $to = $paramValue; ?>
-        <? else: ?>
-          <input type="hidden" name="<?= htmlspecialchars($paramName) ?>" value="<?= htmlspecialchars($paramValue) ?>">
-        <? endif; ?>
+        <input type="hidden" name="<?= htmlspecialchars($paramName) ?>" value="<?= htmlspecialchars($paramValue) ?>">
       <? endif; ?>
     <? endforeach; ?>
     <span><?= $this->transEsc('Map Scale'); ?></span>
-    <input type="hidden" name="daterange[]" value="scale_int_mv">
-    <select name="scale_int_mvfrom" id="from">
+    <input type="hidden" name="daterange[]" value="<?= $this->recommend->getFilterName() ?>">
+    <select name="<?= $this->recommend->getFilterName() ?>from" id="from">
       <? foreach($this->recommend->getSettings() as $scale): ?>
-        <option value="<?= $scale ?>" <?= $scale == $from ? 'selected="selected"' : '' ?>>1:<?= $scale ?></option>
+        <option
+          value="<?= $scale ?>"
+          <?= $scale == $this->recommend->getFromValue() ? 'selected="selected"' : '' ?>>
+          1:<?= $scale ?>
+        </option>
       <? endforeach; ?>
     </select>
     <span><?= $this->transEsc('to') ?></span>
-    <select name="scale_int_mvto" id="to">
+    <select name="<?= $this->recommend->getFilterName() ?>to" id="to">
       <? foreach(array_reverse($this->recommend->getSettings()) as $scale): ?>
-        <option value="<?= $scale ?>" <?= $scale == $to ? 'selected="selected"' : '' ?>>1:<?= $scale ?></option>
+        <option
+          value="<?= $scale ?>"
+          <?= $scale == $this->recommend->getToValue() ? 'selected="selected"' : '' ?>>
+          1:<?= $scale ?>
+        </option>
       <? endforeach; ?>
     </select>
     <input type="submit" value="<?= $this->transEsc('Set') ?>">

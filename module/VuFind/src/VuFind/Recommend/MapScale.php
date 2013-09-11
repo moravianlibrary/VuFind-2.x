@@ -64,6 +64,13 @@ class MapScale implements RecommendInterface
     protected $filter;
     
     /**
+     * Store name of filter.
+     * 
+     * @var string
+     */
+    protected $filterName;
+    
+    /**
      * Store module configuration
      * 
      * @var array
@@ -76,6 +83,20 @@ class MapScale implements RecommendInterface
      * @var array
      */
     protected $params;
+    
+    /**
+     * Store 'from' range getting from GET params.
+     * 
+     * @var number
+     */
+    protected $fromValue = null;
+    
+    /**
+     * Store 'to' range getting from GET params.
+     *
+     * @var number
+     */
+    protected $toValue = null;
     
     /**
      * Constructor
@@ -115,6 +136,8 @@ class MapScale implements RecommendInterface
         $this->issetDateRange = is_array($dateRangeConf) && in_array($dateRange, $dateRangeConf);
         // store filter setting
         $this->filter = "$filterType:$filterValue";
+        // store name of filter
+        $this->filterName = $dateRange;
         // store module settings
         $this->settings = explode(',', $moduleSettings);
     }
@@ -137,6 +160,24 @@ class MapScale implements RecommendInterface
 	{
 	    $this->issetFormat = $params->hasFilter($this->filter);
 	    $this->params = $request->toArray();
+	    // process params
+	    if (isset($this->params['daterange']) && is_array($this->params['daterange'])) {
+	        for($i = 0; $i < count($this->params['daterange']); ++$i) {
+	            if ($this->params['daterange'][$i] == $this->filterName) {
+	                unset($this->params['daterange'][$i]);
+	            }
+	        }
+	    }
+	    // remove daterange if it is empty
+	    if (empty($this->params['daterange'])) {
+	        unset($this->params['daterange']);
+	    }
+	    // save values
+	    $this->fromValue = $this->params[$this->filterName . 'from'];
+	    $this->toValue = $this->params[$this->filterName . 'to'];
+	    // remove values from params
+	    unset($this->params[$this->filterName . 'from']);
+	    unset($this->params[$this->filterName . 'to']);
 	}
 
 	/**
@@ -182,5 +223,34 @@ class MapScale implements RecommendInterface
 	{
 	    return $this->params;
 	}
+	
+	/**
+	 * Returns name of filter.
+	 * 
+	 * @return string
+	 */
+	public function getFilterName()
+	{
+		return $this->filterName;
+	}
+	
+	/**
+	 * Returns fromValue.
+	 * 
+	 * @return number
+	 */
+	public function getFromValue()
+	{
+	    return $this->fromValue;
+	}
 
+	/**
+	 * Returns toValue.
+	 * 
+	 * @return number
+	 */
+	public function getToValue()
+	{
+	    return $this->toValue;
+	}
 }
