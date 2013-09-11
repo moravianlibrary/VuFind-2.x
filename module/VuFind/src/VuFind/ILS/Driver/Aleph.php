@@ -254,7 +254,7 @@ class AlephTranslator
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     http://vufind.org/wiki/vufind2:developer_manual Wiki
  */
-class AlephRestfulException extends \Exception
+class AlephRestfulException extends ILSException
 {
     /**
      * XML response (false for none)
@@ -519,6 +519,8 @@ class Aleph extends AbstractBase implements \Zend\Log\LoggerAwareInterface,
         $replyCode = (string) $result->{'reply-code'};
         if ($replyCode != "0000") {
             $replyText = (string) $result->{'reply-text'};
+            $this->logger->err("DLF request failed", array('url' => $url,
+                'reply-code' => $replyCode, 'reply-message' => $replyText));
             $ex = new AlephRestfulException($replyText, $replyCode);
             $ex->setXmlResponse($result);
             throw $ex;
@@ -773,13 +775,7 @@ class Aleph extends AbstractBase implements \Zend\Log\LoggerAwareInterface,
         } else if (isset($this->defaultPatronId)) {
             $params['patron'] = $this->defaultPatronId;
         }
-        try {
-            $xml = $this->doRestDLFRequest(
-                array('record', $resource, 'items'), $params
-            );
-        } catch (\Exception $ex) {
-            return array();
-        }
+        $xml = $this->doRestDLFRequest( array('record', $resource, 'items'), $params);
         foreach ($xml->{'items'}->{'item'} as $item) {
             $item_status         = (string) $item->{'z30-item-status-code'}; // $isc
             $item_process_status = (string) $item->{'z30-item-process-status-code'}; // $ipsc
