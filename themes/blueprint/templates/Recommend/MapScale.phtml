@@ -1,0 +1,28 @@
+<? if($this->recommend->isActive()): ?>
+  <form name="scale_int_mvFilter" id="scale_int_mvFilter">
+    <? /* Insert actual GET params */ ?>
+    <? foreach($this->recommend->getParams() as $paramName => $paramValue): ?>
+      <? if(is_array($paramValue)): ?>
+        <? foreach($paramValue as $paramSubValue): ?>
+         <input type="hidden" name="<?= htmlspecialchars($paramName) ?>[]" value="<?= htmlspecialchars($paramSubValue) ?>">
+        <? endforeach; ?>
+      <? else: ?>
+        <input type="hidden" name="<?= htmlspecialchars($paramName) ?>" value="<?= htmlspecialchars($paramValue) ?>">
+      <? endif; ?>
+    <? endforeach; ?>
+    <span><?= $this->transEsc('Map Scale'); ?></span>
+    <input type="hidden" name="daterange[]" value="scale_int_mv">
+    <select name="scale_int_mvfrom" id="from">
+      <? foreach($this->recommend->getSettings() as $scale): ?>
+        <option value="<?= $scale ?>">1:<?= $scale ?></option>
+      <? endforeach; ?>
+    </select>
+    <span><?= $this->transEsc('to') ?></span>
+    <select name="scale_int_mvto" id="to">
+      <? foreach(array_reverse($this->recommend->getSettings()) as $scale): ?>
+        <option value="<?= $scale ?>">1:<?= $scale ?></option>
+      <? endforeach; ?>
+    </select>
+    <input type="submit" value="<?= $this->transEsc('Set') ?>">
+  </form>
+<? endif; ?>

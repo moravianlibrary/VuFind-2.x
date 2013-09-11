@@ -647,6 +647,11 @@ $config = array(
                             $sm->getServiceLocator()->get('VuFind\Config')
                         );
                     },
+                    'mapscale' => function($sm) {
+                        return new \VuFind\Recommend\MapScale(
+                            $sm->getServiceLocator()->get('VuFind\Config')
+                        );
+                    }
                 ),
                 'invokables' => array(
                     'europeanaresultsdeferred' => 'VuFind\Recommend\EuropeanaResultsDeferred',
