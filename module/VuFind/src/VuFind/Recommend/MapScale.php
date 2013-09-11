@@ -1,6 +1,6 @@
 <?php
 /**
- * RecommendLinks Recommendations Module
+* MapScale Recommendations Module
 *
 * PHP version 5
 *
@@ -21,20 +21,20 @@
 *
 * @category VuFind2
 * @package  Recommendations
-* @author   Vaclav Rosecky <xrosecky@gmail.com>
+* @author   Erich Duda <dudaerich@gmail.com>
 * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
 * @link     http://vufind.org/wiki/vufind2:recommendation_modules Wiki
 */
 namespace Vufind\Recommend;
 
 /**
- * RecommendLinks Recommendations Module
+ * MapScale Recommendations Module
  *
- * This class recommends links to services, that user may try.
+ * This class recommends scale filter for maps.
  *
  * @category VuFind2
  * @package  Recommendations
- * @author   Vaclav Rosecky <xrosecky@gmail.com>
+ * @author   Erich Duda <dudaerich@gmail.com>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     http://vufind.org/wiki/vufind2:recommendation_modules Wiki
  */
