@@ -207,6 +207,13 @@ class AbstractRecord extends AbstractBase
      */
     public function homeAction()
     {
+        // Set up default tab (first fixing it if it is invalid):
+        $tabs = $this->getAllTabs();
+        if (!isset($tabs[$this->defaultTab])) {
+            $keys = array_keys($tabs);
+            $this->defaultTab = isset($keys[0]) ? $keys[0] : null;
+        }
+
         // Save statistics:
         if ($this->logStatistics) {
             $this->getServiceLocator()->get('VuFind\RecordStats')
@@ -359,6 +366,11 @@ class AbstractRecord extends AbstractBase
         // Process form submission:
         $view = $this->createEmailViewModel();
         if ($this->params()->fromPost('submit')) {
+            // Send parameters back to view so form can be re-populated:
+            $view->to = $this->params()->fromPost('to');
+            $view->from = $this->params()->fromPost('from');
+            $view->message = $this->params()->fromPost('message');
+
             // Attempt to send the email and show an appropriate flash message:
             try {
                 $this->getServiceLocator()->get('VuFind\Mailer')->sendRecord(
@@ -496,7 +508,7 @@ class AbstractRecord extends AbstractBase
      * init() method since we don't want to perform an expensive search twice
      * when homeAction() forwards to another method.
      *
-     * @return AbstractRecordDriver
+     * @return \VuFind\RecordDriver\AbstractBase
      */
     protected function loadRecord()
     {

@@ -21,10 +21,14 @@ class SolrMarc extends ParentSolrMarc
         return $bibinfo;
     }
 
-    //FIXME: TODO
+    /**
+     * gets CNB of current record (field 015)
+     * @return string CNB if exists, empty string otherwise 
+     */
     protected function getCNB()
     {
-        
+        $cnb = parent::getFieldArray('015');
+        return is_array($cnb) && !empty($cnb[0]) ? $cnb[0] : '';
     }
 
 }
