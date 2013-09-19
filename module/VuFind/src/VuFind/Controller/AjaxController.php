@@ -810,14 +810,22 @@ class AjaxController extends AbstractBase
     {
         $facets = $results->getFullFieldFacets(array_keys($fields));
         $retVal = array();
+        $currentYear = date("Y");
         foreach ($facets as $field => $values) {
-            $newValues = array('data' => array());
+            $data = array();
             foreach ($values['data']['list'] as $current) {
                 // Only retain numeric values!
                 if (preg_match("/^[0-9]+$/", $current['value'])) {
-                    $newValues['data'][]
-                        = array($current['value'], $current['count']);
+                    if ($current['value'] < $currentYear) {
+                        $data[$current['value']] = $current['count'];
+                    }
                 }
+            }
+            ksort($data);
+            $newValues = array('data' => array());
+            foreach ($data as $key => $value) {
+                $newValues['data'][] = array(
+                    $key, $value);
             }
             $retVal[$field] = $newValues;
         }
@@ -1000,9 +1008,9 @@ class AjaxController extends AbstractBase
                 $this->params()->fromPost('id'),
                 $this->params()->fromPost('source', 'VuFind')
             );
+            $view = $this->createEmailViewModel();
             $this->getServiceLocator()->get('VuFind\Mailer')->sendRecord(
-                $this->params()->fromPost('to'), $this->params()->fromPost('from'),
-                $this->params()->fromPost('message'), $record,
+                $view->to, $view->from, $view->message, $record,
                 $this->getViewRenderer()
             );
             return $this->output(
@@ -1045,10 +1053,10 @@ class AjaxController extends AbstractBase
 
         // Attempt to send the email:
         try {
+            $view = $this->createEmailViewModel();
             $this->getServiceLocator()->get('VuFind\Mailer')->sendLink(
-                $this->params()->fromPost('to'), $this->params()->fromPost('from'),
-                $this->params()->fromPost('message'),
-                $url, $this->getViewRenderer(), $this->params()->fromPost('subject')
+                $view->to, $view->from, $view->message, $url,
+                $this->getViewRenderer(), $this->params()->fromPost('subject')
             );
             return $this->output(
                 $this->translate('email_success'), self::STATUS_OK

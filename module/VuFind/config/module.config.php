@@ -102,6 +102,7 @@ $config = array(
             'missingrecord' => 'VuFind\Controller\MissingrecordController',
             'my-research' => 'VuFind\Controller\MyResearchController',
             'oai' => 'VuFind\Controller\OaiController',
+            'qrcode' => 'VuFind\Controller\QRCodeController',
             'pazpar2' => 'VuFind\Controller\Pazpar2Controller',
             'records' => 'VuFind\Controller\RecordsController',
             'search' => 'VuFind\Controller\SearchController',
@@ -321,6 +322,7 @@ $config = array(
         'invokables' => array(
             'VuFind\SessionManager' => 'Zend\Session\SessionManager',
             'VuFind\Search'         => 'VuFindSearch\Service',
+            'VuFind\Search\Memory'  => 'VuFind\Search\Memory',
         ),
         'initializers' => array(
             array('VuFind\ServiceManager\Initializer', 'initInstance'),
@@ -622,6 +624,11 @@ $config = array(
                             $sm->getServiceLocator()->get('VuFind\SearchResultsPluginManager')
                         );
                     },
+                    'switchquery' => function ($sm) {
+                        return new \VuFind\Recommend\SwitchQuery(
+                            $sm->getServiceLocator()->get('VuFind\Search\BackendManager')
+                        );
+                    },
                     'topfacets' => function ($sm) {
                         return new \VuFind\Recommend\TopFacets(
                             $sm->getServiceLocator()->get('VuFind\Config')
@@ -885,6 +892,20 @@ $config = array(
             ),
             'search_results' => array(
                 'abstract_factories' => array('VuFind\Search\Results\PluginFactory'),
+                'factories' => array(
+                    'solr' => function ($sm) {
+                        $factory = new \VuFind\Search\Results\PluginFactory();
+                        $solr = $factory->createServiceWithName($sm, 'solr', 'Solr');
+                        $config = $sm->getServiceLocator()
+                            ->get('VuFind\Config')->get('config');
+                        $spellConfig = isset($config->Spelling)
+                            ? $config->Spelling : null;
+                        $solr->setSpellingProcessor(
+                            new \VuFind\Search\Solr\SpellingProcessor($spellConfig)
+                        );
+                        return $solr;
+                    },
+                ),
             ),
             'session' => array(
                 'abstract_factories' => array('VuFind\Session\PluginFactory'),
@@ -924,21 +945,35 @@ $config = array(
                 ),
             ),
         ),
+        // This section behaves just like recorddriver_tabs below, but is used for
+        // the collection module instead of the standard record view.
+        'recorddriver_collection_tabs' => array(
+            'VuFind\RecordDriver\AbstractBase' => array(
+                'tabs' => array(
+                    'CollectionList' => 'CollectionList',
+                    'HierarchyTree' => 'CollectionHierarchyTree',
+                ),
+                'defaultTab' => null,
+            ),
+        ),
         // This section controls which tabs are used for which record driver classes.
         // Each sub-array is a map from a tab name (as used in a record URL) to a tab
         // service (found in recordtab_plugin_manager, below).  If a particular record
         // driver is not defined here, it will inherit configuration from a configured
-        // parent class.
+        // parent class.  The defaultTab setting may be used to specify the default
+        // active tab; if null, the value from the relevant .ini file will be used.
         'recorddriver_tabs' => array(
             'VuFind\RecordDriver\Pazpar2' => array(
                 'tabs' => array (
                     'Details' => 'StaffViewMARC',
                  ),
+                'defaultTab' => null,
             ),
             'VuFind\RecordDriver\SolrAuth' => array(
                 'tabs' => array (
                     'Details' => 'StaffViewMARC',
                  ),
+                'defaultTab' => null,
             ),
             'VuFind\RecordDriver\SolrDefault' => array(
                 'tabs' => array (
@@ -948,6 +983,7 @@ $config = array(
                     'HierarchyTree' => 'HierarchyTree', 'Map' => 'Map',
                     'Details' => 'StaffViewArray',
                 ),
+                'defaultTab' => null,
             ),
             'VuFind\RecordDriver\SolrMarc' => array(
                 'tabs' => array(
@@ -957,6 +993,7 @@ $config = array(
                     'HierarchyTree' => 'HierarchyTree', 'Map' => 'Map',
                     'Details' => 'StaffViewMARC',
                 ),
+                'defaultTab' => null,
             ),
             'VuFind\RecordDriver\Summon' => array(
                 'tabs' => array(
@@ -965,6 +1002,7 @@ $config = array(
                     'Reviews' => 'Reviews', 'Excerpt' => 'Excerpt',
                     'Details' => 'StaffViewArray',
                 ),
+                'defaultTab' => null,
             ),
             'VuFind\RecordDriver\WorldCat' => array(
                 'tabs' => array (
@@ -973,6 +1011,7 @@ $config = array(
                     'Reviews' => 'Reviews', 'Excerpt' => 'Excerpt',
                     'Details' => 'StaffViewMARC',
                 ),
+                'defaultTab' => null,
             ),
         ),
     ),
@@ -1017,6 +1056,7 @@ $staticRoutes = array(
     'MyResearch/Favorites', 'MyResearch/Fines',
     'MyResearch/Holds', 'MyResearch/Home', 'MyResearch/Logout', 'MyResearch/Profile',
     'MyResearch/SaveSearch',
+    'QRCode/Show', 'QRCode/Unavailable',
     'OAI/Server', 'Pazpar2/Home', 'Pazpar2/Search', 'Records/Home',
     'Search/Advanced', 'Search/Email', 'Search/History', 'Search/Home',
     'Search/NewItem', 'Search/OpenSearch', 'Search/Reserves', 'Search/Results',
