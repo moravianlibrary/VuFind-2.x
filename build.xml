@@ -17,6 +17,7 @@
   <property name="pgsqlhost" value="localhost" />
   <property name="pgsqlrootuser" value="postgres" />
   <property name="version" value="2.1" />
+  <property name="url" value="http://localhost:8080/solr/biblio/update"/>
 
   <!-- Main Target -->
   <target name="main" description="main target">
@@ -152,6 +153,12 @@
     <exec command="find ${srcdir}/tests/data/authority -name *.mrc -printf %p," outputProperty="authlist" />
     <foreach list="${authlist}" param="filename" delimiter="," target="importauthrec" />
 
+    <!-- import xml test records into vufind index -->
+    <exec command="find ${srcdir}/tests/data -name '*.xml' -printf '%p,'" outputProperty="xmllist" />
+    <foreach list="${xmllist}" param="filename" delimiter="," target="importxmlrec" />
+    <!-- commit records -->
+    <exec command="curl ${url}?softCommit=true"/>
+
     <!-- build alphabrowse index -->
     <exec command="VUFIND_HOME=${srcdir} VUFIND_LOCAL_DIR=${srcdir}/local ${srcdir}/index-alphabetic-browse.sh" outputProperty="LASTOUTPUT" />
     <echo message="${LASTOUTPUT}" />
@@ -252,6 +259,16 @@
         <!-- clean up temp files -->
         <delete file="${srcdir}/local/import/marc-${BASENAME}.properties" />
         <delete file="${srcdir}/local/import/import-${BASENAME}.properties" />
+      </then>
+    </if>
+  </target>
+	
+  <target name="importxmlrec" description="import each of the XML bibliographic test records">
+    <if>
+    <istrue value="${filename}"/>       <!-- To ignore the last token, as find command output list has ',' after last filename -->
+      <then>
+        <echo message="Process xml file: ${filename}"/>
+        <exec command="curl ${url} --data-binary '@${filename}' -H 'Content-type:application/xml'"/>
       </then>
     </if>
   </target>

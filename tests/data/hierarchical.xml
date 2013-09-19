@@ -1,0 +1,26 @@
+<add>
+  <doc>
+    <field name="id">mzk.001322483</field>
+    <field name="institution">0/MZK</field>
+    <field name="institution">1/MZK/SKL</field>
+    <field name="institution">2/MZK/SKL/88</field>
+  </doc>
+  <doc>
+    <field name="id">mzk.000338007</field>
+    <field name="institution">0/MZK</field>
+    <field name="institution">1/MZK/SKL</field>
+    <field name="institution">2/MZK/SKL/31</field>
+  </doc>
+  <doc>
+    <field name="id">mzk.001322420</field>
+    <field name="institution">0/MZK</field>
+    <field name="institution">1/MZK/SKL</field>
+    <field name="institution">2/MZK/SKL/88</field>
+  </doc>
+  <doc>
+    <field name="id">mzk.001304543</field>
+    <field name="institution">0/MZK</field>
+    <field name="institution">1/MZK/DEP</field>
+    <field name="institution">2/MZK/DEP/95</field>
+  </doc>
+</add>
