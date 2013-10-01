@@ -1020,6 +1020,21 @@ $config = array(
             ),
         ),
     ),
+    // Neccessary for controller test
+    'module_listener_options' => array(
+        'config_glob_paths'    => array(
+            'config/autoload/{,*.}{global,local}.php',
+        ),
+        'module_paths' => array(
+            './module',
+            './vendor',
+        ),
+    ),
+    'modules' => array(
+        'VuFind',
+        'VuFindTheme',
+    ),
+    /* END config for controller test */
 );
 
 // Define record view routes -- route name => controller
