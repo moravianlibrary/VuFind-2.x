@@ -1,1 +1,13 @@
 body {margin-top:1em}
+.sidegroup {
+	padding: 7px;
+}
+.sidegroup h4 {
+	margin: 4px 0 8px 0;
+}
+.bulkActionButtons {
+	margin-top: 15px;
+}
+.help-inline-start {
+	padding-left: 0;
+}

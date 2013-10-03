@@ -64,10 +64,11 @@
     </div>
 
     <? if ($recordTotal > 0): ?>
-      <div class="pull-right">
+      <div class="pull-left">
         <?=$this->render('search/controls/limit.phtml')?>
         <?=$this->render('search/controls/sort.phtml')?>
-        <br/>
+      </div>
+      <div class="pull-right">
         <?=$this->render('search/controls/view.phtml')?>
       </div>
     <? endif; ?>
