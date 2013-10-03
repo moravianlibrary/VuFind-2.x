@@ -102,6 +102,7 @@ $(document).ready(function() {
   // Checkbox select all
   $('.checkbox-select-all').change(function() {
     $(this).closest('form').find('.checkbox-select-item').attr('checked', this.checked);
+    $(this).closest('form').find('.checkbox-select-all').attr('checked', this.checked);
   });
   
   // handle QR code links
