@@ -1,7 +1,6 @@
-<div class="limitSelect">
   <? $limitList = $this->params->getLimitList(); if (count($limitList) > 1): ?>
-    <form action="<?=$this->currentPath() . $this->results->getUrlQuery()->setLimit(null)?>" method="post">
-      <label for="limit"><?=$this->transEsc('Results per page')?></label>
+    <form class="pull-right form-inline" action="<?=$this->currentPath() . $this->results->getUrlQuery()->setLimit(null)?>" method="post">
+      <label class="help-inline" for="limit"><?=$this->transEsc('Results per page')?></label>
       <select id="limit" name="limit" class="jumpMenu">
         <? foreach ($limitList as $limitVal => $limitData): ?>
           <option value="<?=$this->escapeHtml($limitVal)?>"<?=$limitData['selected']?' selected="selected"':''?>><?=$this->escapeHtml($limitData['desc'])?></option>
@@ -10,4 +9,3 @@
       <noscript><input type="submit" value="<?=$this->transEsc("Set")?>" /></noscript>
     </form>
   <? endif; ?>
-</div>
