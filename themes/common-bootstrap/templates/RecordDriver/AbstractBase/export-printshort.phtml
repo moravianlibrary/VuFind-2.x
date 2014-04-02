@@ -1,0 +1,83 @@
+<?
+$title = rtrim($this->driver->getTitle(), " /");
+echo $this->transEsc('Title');
+echo ": $title\n";
+
+$author = $this->driver->tryMethod('getPrimaryAuthor');
+if (!empty($author)) {
+    echo $this->transEsc('Main Author');
+    echo ": $author\n";
+}
+
+$secondaryAuthors = $this->driver->tryMethod('getSecondaryAuthors');
+if (is_array($secondaryAuthors)) {
+    foreach ($secondaryAuthors as $current) {
+        echo $this->transEsc('Author');
+        echo ": $current\n";
+    }
+}
+
+$pubPlaces = $this->driver->tryMethod('getPlacesOfPublication');
+$pubDates = $this->driver->tryMethod('getPublicationDates');
+$pubNames = $this->driver->tryMethod('getPublishers');
+if (is_array($pubPlaces) && is_array($pubDates) && is_array($pubNames)) {
+    $total = min(count($pubPlaces), count($pubDates), count($pubNames));
+    // if we have pub dates but no other details, we still want to export the year:
+    if ($total == 0 && count($pubDates) > 0) {
+        $total = 1;
+    }
+    for ($i = 0; $i < $total; $i++) {
+        if (isset($pubNames[$i])) {
+            echo $this->transEsc('adv_search_publisher');
+            echo ": " . rtrim($pubNames[$i], ", ") . "\n";
+        }
+        $date = trim($pubDates[$i], '[]. ');
+        if (strlen($date) > 4) {
+            $date = $this->dateTime()->extractYear($date);
+        }
+        if ($date) {
+            echo $this->transEsc('Published');
+            echo ": $date\n";
+        }
+        if (isset($pubPlaces[$i])) {
+            echo $this->transEsc('Published in');
+            echo ": " . rtrim(str_replace(array('[', ']'), '', $pubPlaces[$i]), ': '). "\n";
+        }
+    }
+}
+
+$languages = $this->driver->tryMethod('getLanguages');
+if (is_array($languages)) {
+    foreach ($languages as $lang) {
+        echo $this->transEsc('Language');
+        echo ": $lang\n";
+    }
+}
+
+$series = $this->driver->tryMethod('getSeries');
+if (is_array($series)) {
+    foreach ($series as $current) {
+        echo $this->transEsc('Series');
+        echo ': ' . (is_array($current) ? $current['name'] : $current) . "\n";
+    }
+}
+
+$isbns = $this->driver->tryMethod('getISBNs');
+if (is_array($isbns)) {
+    foreach ($isbns as $isbn) {
+        echo $this->transEsc('ISBN');
+        echo ": $isbn\n";
+    }
+}
+
+$issns = $this->driver->tryMethod('getISSNs');
+if (is_array($issns)) {
+    foreach ($issns as $issn) {
+        echo $this->transEsc('ISSN');
+        echo ": $issn\n";
+    }
+}
+
+// Record separator:
+echo "\n";
+?>
