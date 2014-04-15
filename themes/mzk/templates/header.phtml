@@ -12,10 +12,15 @@
           $queryParams = array_merge($params, $queryParams);
         ?>
         <li>
+          <? if (($langCode) == $this->layout()->userLang): ?>
+            <img class="langFlag" src="<?=$this->imageLink($langImg)?>" alt="<?=$langName?>" />
+            <?=$this->transEsc($langName);?>
+          <? else: ?>
           <a class="language" href="<?=$this->url(null, array(), array('query' => $queryParams), true);?>">
             <img class="langFlag" src="<?=$this->imageLink($langImg)?>" alt="<?=$langName?>" />
             <?=$this->transEsc($langName);?>
           </a>
+          <? endif; ?>
         </li>
       <? endforeach; ?>
     </ul>
@@ -40,8 +45,8 @@
     <? endif; ?>
 
     <ul class="nav navbar-nav pull-right">
-      
-      
+
+
       <? if (is_object($account) && $account->loginEnabled()): // hide login/logout if unavailable ?>
         <li>
           <div class="loginbox">
@@ -69,12 +74,12 @@
           <? endif; ?>
         </li>
       <? endif; ?>
-      
+
     </ul>
 
     <div class="header-finisher"></div>
 
   </div>
-<!--   
+<!--
 </nav>
  -->
