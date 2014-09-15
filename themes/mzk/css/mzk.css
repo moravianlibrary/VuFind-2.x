@@ -66,6 +66,10 @@ li.header-logo {
   text-shadow: none;
 }
 
+.navbar .nav>li> p.language  {
+	  padding: 5px;
+}
+
 /* login box */
 
 a.myresearch, a.register {
