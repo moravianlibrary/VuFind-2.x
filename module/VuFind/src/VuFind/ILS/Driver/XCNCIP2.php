@@ -93,6 +93,8 @@ class XCNCIP2 extends AbstractBase implements
      */
     protected function sendRequest ($xml, $testing = false)
     {
+        $xml = str_replace('BOA001.', 'MZK01', $xml); // Conversion BOA to MZK
+
         // TODO: delete this part - begin
         // This is only for development purposes.
         if (! $this->isValidXMLAgainstXSD($xml)) {
@@ -126,7 +128,6 @@ class XCNCIP2 extends AbstractBase implements
         $response->registerXPathNamespace('ns1',
                 'http://www.niso.org/2008/ncip');
 
-        //file_put_contents('/tmp/aaaaaaaaa', print_r($response->AsXML(), true));
         if (! $this->isValidXMLAgainstXSD($response)) {
             throw new ILSException('Not valid XML response!');
         }
@@ -136,6 +137,8 @@ class XCNCIP2 extends AbstractBase implements
             var_dump($response->AsXML());
             throw new ILSException('Problem has occured!');
         }
+        $response = str_replace('MZK01', 'BOA001.', $response->AsXML());
+        $response = simplexml_load_string($response);
         return $response;
     }
 
@@ -474,8 +477,9 @@ class XCNCIP2 extends AbstractBase implements
 
     public function getMyHistory ($patron, $currentLimit = 0)
     {
-        // TODO fix
-        return $this->getMyTransactions($patron);
+        $request = $this->requests->getMyHistory($patron);
+        $response = $this->sendRequest($request);
+        return $this->handleTransactions($response);
     }
 
     /**
@@ -661,6 +665,11 @@ class XCNCIP2 extends AbstractBase implements
     {
         $request = $this->requests->getMyTransactions($patron);
         $response = $this->sendRequest($request);
+        return $this->handleTransactions($response);
+    }
+
+    private function handleTransactions ($response)
+    {
         $retVal = array();
         $list = $response->xpath('ns1:LookupUserResponse/ns1:LoanedItem');
 
@@ -694,7 +703,7 @@ class XCNCIP2 extends AbstractBase implements
             $dateDue = date('j. n. Y', $parsedDate);
 
             $bib_id = empty($item_id) ? null : explode('-', (string)$item_id[0])[0];
-            $bib_id = substr_replace($bib_id, '-', 5, 0); // number 5 is position
+            //$bib_id = substr_replace($bib_id, '-', 5, 0); // number 5 is position
             $retVal[] = array(
                     'duedate' => empty($dateDue) ? '' : $dateDue,
                     'id'  => empty($bib_id) ? '' : $bib_id,
@@ -799,9 +808,9 @@ class XCNCIP2 extends AbstractBase implements
             $create = $current->xpath('ns1:DatePlaced');
             $position = $current->xpath('ns1:HoldQueuePosition');
             $item_id = $current->xpath('ns1:ItemId/ns1:ItemIdentifierValue');
-            $title = $current->xpath('ns1:Title');
+            $title = $current->xpath('ns1:Ext/ns1:BibliographicDescription/ns1:Title');
             $bib_id = empty($id) ? null : explode('-', (string)$id[0])[0];
-            $bib_id = substr_replace($bib_id, '-', 5, 0); // number 5 is position
+            //$bib_id = substr_replace($bib_id, '-', 5, 0); // number 5 is position
 
             $parsedDate = empty($create) ? '' : strtotime($create[0]);
             $create = date('j. n. Y', $parsedDate);
@@ -1091,9 +1100,9 @@ class XCNCIP2 extends AbstractBase implements
  */
 class NCIPRequests
 {
-    protected $cpk_conversion = true;
+    protected $cpk_conversion = false;
 
-    protected function cpkConvert($id)
+    protected function cpkConvert($id) // Substituted by str_replace in method sendRequest.
     {
         if ($this->cpk_conversion) {
             $id = substr_replace($id, 'MZK01', 0, 7);
@@ -1250,6 +1259,14 @@ class NCIPRequests
         return $this->getMyProfile($patron, $extras);
     }
 
+    public function getMyHistory ($patron)
+    {
+        $extras = array(
+            '<ns1:LoanedItemsDesired/>'
+        );
+        return $this->getMyProfile($patron, $extras);
+    }
+
     /**
      * Build the NCIP request XML to get patron's current holds - books which
      * are reserved.
@@ -1313,7 +1330,9 @@ class NCIPRequests
     public function getMyTransactions ($patron)
     {
         $extras = array(
-                '<ns1:LoanedItemsDesired/>'
+                '<ns1:LoanedItemsDesired/>',
+                '<ns1:RequestedItemsDesired/>',
+                '<ns1:UserFiscalAccountDesired/>',
         );
         return $this->getMyProfile($patron, $extras);
     }
