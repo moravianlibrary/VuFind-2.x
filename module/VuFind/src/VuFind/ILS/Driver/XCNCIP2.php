@@ -134,6 +134,7 @@ class XCNCIP2 extends AbstractBase implements
 
         if (! $this->isCorrect($response) && ! $testing) {
             // TODO chcek problem type
+            var_dump($xml);
             var_dump($response->AsXML());
             throw new ILSException('Problem has occured!');
         }
@@ -155,14 +156,25 @@ class XCNCIP2 extends AbstractBase implements
      */
     public function cancelHolds($cancelDetails)
     {
+        $holds = $this->getMyHolds($cancelDetails['patron']);
         $items = array();
         foreach ($cancelDetails['details'] as $recent)
         {
-            $request = $this->requests->cancelHolds($recent, $cancelDetails['patron']['id']);
+            foreach ($holds as $onehold)
+            {
+                if ($onehold['id'] == $recent)
+                {
+                    $item_id = $onehold['item_id'];
+                    break;
+                }
+            }
+            if (empty($item_id)) return null;
+            $request = $this->requests->cancelHolds($item_id, $cancelDetails['patron']['id']);
             $response = $this->sendRequest($request);
 
-            $item_id = $response->xpath('ns1:CancelRequestItemResponse/ns1:ItemId/ns1:ItemIdentifierValue');
-            $items[(string)$item_id[0]] = array(
+            //$item_id = $response->xpath('ns1:CancelRequestItemResponse/ns1:ItemId/ns1:ItemIdentifierValue');
+            //$items[(string)$item_id[0]] = array(
+            $items[$item_id] = array(
                 'success' => true,
                 'status' => '',
                 'sysMessage' => '',
@@ -326,7 +338,7 @@ class XCNCIP2 extends AbstractBase implements
 
         $available = (string) $status[0] === 'On Shelf';
 
-        $dueDate = $available ? null : explode("; ", (string) $status[0])[0];
+        /*$dueDate = $available ? null : explode("; ", (string) $status[0])[0];
 
         if (! empty($dueDate) && $dueDate != 'On Hold') {
 
@@ -337,7 +349,7 @@ class XCNCIP2 extends AbstractBase implements
             $dueDate[1] = date('n', strtotime($dueDate[1]));
 
             $dueDate = implode(". ", $dueDate);
-        }
+        }*/
 
         if (! empty($location)) $onStock = substr($location, 0, 5) == 'Stock';
         else $onStock = false;
@@ -399,16 +411,18 @@ class XCNCIP2 extends AbstractBase implements
         // Input: MZK01000974548-MZK50000974548000010
         // Output: MZK01-000974548/ExtendedHold?barcode=MZK50000974548000020
         // Hold?id=MZK01-001422752&item_id=MZK50001457754000010&hashKey=451f0e3f0112decdadc4a9e507a60cfb#tabnav
+
         $itemIdParts = explode("-", $item_id);
 
-        $id = substr($itemIdParts[0], 0, 5) . "-" . substr($itemIdParts[0], 5);
+        /*$id = substr($itemIdParts[0], 0, 5) . "-" . substr($itemIdParts[0], 5);
         $link .= $id . '/Hold?id=' . $id . '&item_id=';
-        $link .= $itemIdParts[1];
+        $link .= $itemIdParts[1];*/
+        $link .= $itemIdParts[0] . '/Hold?id=' . $itemIdParts[0] . '&item_id=' . $itemIdParts[1];
         $link .= '#tabnav';
         return $link;
     }
 
-    public function getHoldLink ($item_id)
+    /*public function getHoldLink ($item_id)
     {
         // TODO testing purposes
         $itemIdParts = explode("-", $item_id);
@@ -419,7 +433,7 @@ class XCNCIP2 extends AbstractBase implements
         $link .= '#tabnav';
         return 'odlisenie/Hold?id=MZK01-001422752&item_id=MZK50001457754000010#tabnav';
         return $link;
-    }
+    }*/
 
     public function placeHold($holdDetails)
     {
@@ -456,15 +470,14 @@ class XCNCIP2 extends AbstractBase implements
 
     public function getPickUpLocations ($patron = null, $holdInformation = null)
     {
-        // TODO testing purposes
         return array(
             '1' => array(
-                'locationID' => 'mzk_test',
-                'locationDisplay' => 'Moravska zemska knihovna test',
+                'locationID' => 'mzk',
+                'locationDisplay' => 'Moravska zemska knihovna',
             ),
             '2' => array(
-                'locationID' => 'mzk2_test',
-                'locationDisplay' => 'Moravska zemska knihovna 2 test',
+                'locationID' => 'knihovna_test',
+                'locationDisplay' => 'Knihovna 2 test',
             ),
         );
     }
@@ -802,8 +815,7 @@ class XCNCIP2 extends AbstractBase implements
             $type = $current->xpath('ns1:RequestType');
             $id = $current->xpath('ns1:ItemId/ns1:ItemIdentifierValue');
             $location = $current->xpath('ns1:PickupLocation');
-            $reqnum = $current->xpath(
-                    'ns1:RequestId/ns1:RequestIdentifierValue');
+            $reqnum = $current->xpath('ns1:RequestId/ns1:RequestIdentifierValue');
             $expire = $current->xpath('ns1:PickupExpiryDate');
             $create = $current->xpath('ns1:DatePlaced');
             $position = $current->xpath('ns1:HoldQueuePosition');
@@ -1129,7 +1141,8 @@ class NCIPRequests
                  '<ns1:ItemId><ns1:ItemIdentifierValue>' .
                  htmlspecialchars($itemID) .
                  '</ns1:ItemIdentifierValue></ns1:ItemId>' .
-                 '<ns1:RequestType>cancel</ns1:RequestType>' .
+                 '<ns1:RequestType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requesttype/requesttype.scm">Hold</ns1:RequestType>' .
+                 '<ns1:RequestScopeType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requestscopetype/requestscopetype.scm">Item</ns1:RequestScopeType>' .
                  '</ns1:CancelRequestItem></ns1:NCIPMessage>';
         return $xml;
     }
@@ -1383,7 +1396,7 @@ class NCIPRequests
     public function placeHold ($holdDetails)
     {
         $id = $holdDetails['id'];
-        $id = substr_replace($id, '', 5, 1);
+        //$id = substr_replace($id, '', 5, 1);
         $id .= '-';
         $id .= $holdDetails['item_id'];
         $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
@@ -1399,7 +1412,7 @@ class NCIPRequests
                 '<ns1:RequestScopeType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requestscopetype/requestscopetype.scm">Item</ns1:RequestScopeType>' .
                 '<ns1:EarliestDateNeeded>2014-09-09T00:00:00</ns1:EarliestDateNeeded>' .
                 '<ns1:NeedBeforeDate>2014-09-17T00:00:00</ns1:NeedBeforeDate>' .
-                '<ns1:PickupLocation>MZK </ns1:PickupLocation>' .
+                '<ns1:PickupLocation>' . $holdDetails['pickUpLocation'] . '</ns1:PickupLocation>' .
                 '<ns1:PickupExpiryDate>2014-09-30T00:00:00</ns1:PickupExpiryDate>' .
                 '</ns1:RequestItem></ns1:NCIPMessage>';
         return $xml;
