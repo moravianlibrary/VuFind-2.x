@@ -359,11 +359,52 @@ class MyResearchController extends MyResearchControllerBase
 
     public function profileAction()
     {
-        $view = parent::profileAction();
+        // Stop now if the user does not have valid catalog credentials available:
+        $account = $this->getAuthManager();
+        if ($account->isLoggedIn() == false) {
+            return $this->forceLogin();
+        }
+
+        // User must be logged in at this point, so we can assume this is non-false:
+        $user = $this->getUser();
+
+        // Process home library parameter (if present):
+        $homeLibrary = $this->params()->fromPost('home_library', false);
+        if (!empty($homeLibrary)) {
+            $user->changeHomeLibrary($homeLibrary);
+            $this->getAuthManager()->updateSession($user);
+            $this->flashMessenger()->setNamespace('info')
+                ->addMessage('profile_update');
+        }
+
+        // Begin building view object:
+        $view = $this->createViewModel();
+
+        // Obtain user information from ILS:       
+        $catalog = $this->getILS();
+        
+        if($patron == null && $catalog->getDriver() instanceof XCNCIP2) {
+        	$patron = $user['cat_username'];
+        	$patron = split(ShibbolethWithWAYF::SEPARATOR, $patron)[1];
+        	// See https://github.com/moravianlibrary/VuFind-2.x/tree/cpk/module/MZKPortal/src/MZKPortal/Auth/ShibbolethWithWAYF.php#L113
+        }
+        
+        $profile = $catalog->getMyProfile($patron);
+        $profile['home_library'] = $user->home_library;
+        $view->profile = $profile;
+        try {
+            $view->pickup = $catalog->getPickUpLocations($patron);
+            $view->defaultPickupLocation
+                = $catalog->getDefaultPickUpLocation($patron);
+        } catch (\Exception $e) {
+            // Do nothing; if we're unable to load information about pickup
+            // locations, they are not supported and we should ignore them.
+        }
+
         if ($view) {
-            $catalog = $this->getILS();
             $view->profileChange = $catalog->checkCapability('changeUserRequest');
         }
+        
         return $view;
     }
 
