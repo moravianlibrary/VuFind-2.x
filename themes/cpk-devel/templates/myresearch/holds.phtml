@@ -4,6 +4,11 @@
 
     // Set up breadcrumbs:
     $this->layout()->breadcrumbs = '<li><a href="' . $this->url('myresearch-home') . '">' . $this->transEsc('Your Account') . '</a></li> <li class="active">' . $this->transEsc('My Holds') . '</li>';
+
+    $isSynchronous = $this->isSynchronous;
+
+    if (! $isSynchronous)
+        $this->headScript()->appendFile("async-holds.js");
 ?>
 
 <div class="row">
@@ -16,7 +21,7 @@
         if ($logos !== null)
             $libraryLogo = $logos->$eppnHostname; ?>
 
-    <h3>
+    <h3 class="well row">
     <img height="32" src="<?=$libraryLogo ?>"/> <?=$this->transEsc("source_$eppnHostname", null, $eppnHostname) ?>
     </h3>
     <? if (!empty($libraryIdentity->recordList)): ?>
@@ -44,10 +49,9 @@
 
       <? $iteration = 0; ?>
       <? foreach ($libraryIdentity->recordList as $resource): ?>
-        <hr/>
         <? $iteration++; ?>
         <? $ilsDetails = $resource->getExtraDetail('ils_details'); ?>
-        <div id="record<?=$this->escapeHtmlAttr($resource->getUniqueId()) ?>" class="row">
+        <div id="record<?=$this->escapeHtmlAttr($resource->getUniqueId()) ?>" class="row well">
           <? if ($libraryIdentity->cancelForm && isset($ilsDetails['cancel_details'])): ?>
             <? $safeId = preg_replace('/[^a-zA-Z0-9]/', '', $resource->getUniqueId()); ?>
             <input type="hidden" name="cancelAllIDS[]" value="<?=$this->escapeHtmlAttr($ilsDetails['cancel_details']) ?>" />
@@ -62,6 +66,7 @@
             $formats = $resource->getFormats();
             ?>
             <? $recordId =  preg_replace("/\./", "", $recordId)?>
+            <? $recordId =  preg_replace("/:/", "", $recordId)?>
             <div id="cover_<?=$recordId?>" class="coverThumbnail">
               <? if ($bibinfo = $this->record($resource)->getObalkyKnihJSONV3()): ?>
                 <script type="text/javascript">
@@ -95,7 +100,7 @@
             <? endif; ?>
 
             <? $formats = $resource->getFormats(); if (count($formats) > 0): ?>
-              <?=str_replace('class="', 'class="label label-info ', $this->record($resource)->getFormatList())?>
+              <?=$this->record($resource)->getFormatList()?>
               <br/>
             <? endif; ?>
             <? if (isset($ilsDetails['volume']) && !empty($ilsDetails['volume'])): ?>

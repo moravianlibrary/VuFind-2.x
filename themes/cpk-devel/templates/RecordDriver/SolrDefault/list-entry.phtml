@@ -14,6 +14,7 @@
   }
 ?>
 <? $recordId =  preg_replace("/\./", "", $recordId)?>
+<? $recordId =  preg_replace("/:/", "", $recordId)?>
 <div class="row result<? if($this->driver->supportsAjaxStatus()): ?> ajaxItem<? endif ?>">
   <div class="col-xs-2 left">
     <label class="pull-left"><?=$this->record($this->driver)->getCheckbox() ?></label>
@@ -31,7 +32,7 @@
   </div>
   <div class="col-xs-6 middle">
     <div class="resultItemLine1">
-      <a href="<?=$this->recordLink()->getUrl($this->driver)?>">
+      <a class="title" href="<?=$this->recordLink()->getUrl($this->driver)?>">
         <?=$this->record($this->driver)->getTitleHtml()?>
       </a>
     </div>
@@ -107,23 +108,6 @@
         <? endforeach; ?>
         <br/>
     <? endif; ?>
-      <div class="callnumAndLocation">
-        <? if ($this->driver->supportsAjaxStatus()): ?>
-          <strong class="hideIfDetailed"><?=$this->transEsc('Call Number')?>:</strong>
-          <span class="callnumber ajax-availability hidden">
-            <?=$this->transEsc('Loading')?>...
-          </span><br class="hideIfDetailed"/>
-          <strong><?=$this->transEsc('Located')?>:</strong>
-          <span class="location ajax-availability hidden">
-            <?=$this->transEsc('Loading')?>...
-          </span>
-          <div class="locationDetails hidden"></div>
-        <? else: ?>
-          <? $summCallNo = $this->driver->getCallNumber(); if (!empty($summCallNo)): ?>
-            <strong><?=$this->transEsc('Call Number')?>:</strong> <?=$this->escapeHtml($summCallNo)?>
-          <? endif; ?>
-        <? endif; ?>
-      </div>
 
       <? /* We need to find out if we're supposed to display an OpenURL link ($openUrlActive),
             but even if we don't plan to display the link, we still want to get the $openUrl
@@ -153,12 +137,8 @@
           <? endif; ?>
         <? endif; ?>
       <br/>
-      <?=str_replace('class="', 'class="label label-info ', $this->record($this->driver)->getFormatList())?>
+      <?=$this->record($this->driver)->getFormatList()?>
 
-      <? if (!$openUrlActive && empty($urls) && $this->driver->supportsAjaxStatus()): ?>
-        <span class="status ajax-availability hidden"><?=$this->transEsc('Loading')?>...</span>
-        <br/><br/>
-      <? endif; ?>
       <?=$this->record($this->driver)->getPreviews()?>
     </div>
   </div>

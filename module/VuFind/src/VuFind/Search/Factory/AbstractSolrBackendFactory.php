@@ -37,6 +37,7 @@ use VuFind\Search\Solr\MultiIndexListener;
 use VuFind\Search\Solr\V3\ErrorListener as LegacyErrorListener;
 use VuFind\Search\Solr\V4\ErrorListener;
 use VuFind\Search\Solr\DeduplicationListener;
+use VuFind\Search\Solr\MZKDeduplicationListener;
 use VuFind\Search\Solr\HierarchicalFacetListener;
 use VuFind\Search\Solr\NestedFacetListener;
 
@@ -225,6 +226,10 @@ abstract class AbstractSolrBackendFactory implements FactoryInterface
             )->attach($events);
         }
 
+        if (isset($search->Records->mzk_deduplication)) {
+            $this->getMZKDeduplicationListener($backend)->attach($events);
+        }
+
         // Attach hierarchical facet listener:
         $this->getHierarchicalFacetListener($backend)->attach($events);
 
@@ -242,10 +247,18 @@ abstract class AbstractSolrBackendFactory implements FactoryInterface
             $hfvListener->attach($events);
         }
 
+        $nested = [];
         // Atach children facet listener
         if (isset($facets->SpecialFacets->nested)) {
             $nested = $facet->SpecialFacets->nested->toArray();
-            $this->getNestedFacetListener($backend, $nested)->attach($events);
+        }
+        $useJsonApi = isset($facets->JSON_API) && isset($facets->JSON_API->enabled) && $facets->JSON_API->enabled;
+        if (!empty($nested) || $useJsonApi) {
+            $orFacets = [];
+            if (isset($facets->Results_Settings->orFacets)) {
+                $orFacets = explode(',', $facet->Results_Settings->orFacets);
+            }
+            $this->getNestedFacetListener($backend, $nested, $orFacets, $useJsonApi)->attach($events);
         }
 
         // Attach error listeners for Solr 3.x and Solr 4.x (for backward
@@ -397,8 +410,30 @@ abstract class AbstractSolrBackendFactory implements FactoryInterface
             $backend,
             $this->serviceLocator,
             $this->searchConfig,
+            $this->facetConfig,
             'datasources',
             $enabled
+        );
+    }
+
+    /**
+     * Get a deduplication listener for the backend
+     *
+     * @param BackendInterface $backend Search backend
+     * @param bool             $enabled Whether deduplication is enabled
+     *
+     * @return DeduplicationListener
+     */
+    protected function getMZKDeduplicationListener(BackendInterface $backend)
+    {
+        $searchConfig = $this->config->get($this->searchConfig);
+        $facetConfig = $this->config->get($this->facetConfig);
+        $authManager = $this->serviceLocator->get('VuFind\AuthManager');
+        return new MZKDeduplicationListener(
+                        $backend,
+                        $authManager,
+                        $searchConfig,
+                        $facetConfig
         );
     }
 
@@ -482,9 +517,9 @@ abstract class AbstractSolrBackendFactory implements FactoryInterface
      *
      * @return NestedFacetListener
      */
-    protected function getNestedFacetListener(BackendInterface $backend, $nestedFacets)
+    protected function getNestedFacetListener(BackendInterface $backend, $nestedFacets, $orFacets, $enabledForAllFacets)
     {
-        return new NestedFacetListener($backend, $nestedFacets);
+        return new NestedFacetListener($backend, $nestedFacets, $orFacets, $enabledForAllFacets);
     }
 
 }

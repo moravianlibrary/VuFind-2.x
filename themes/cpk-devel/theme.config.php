@@ -9,6 +9,7 @@ return array(
         'vendor/font-awesome.min.css',
         'vendor/bootstrap-slider.css',
         'print.css:print',
+        'style.css'
     ),
     'js' => array(
         'vendor/jquery.min.js',
@@ -23,7 +24,6 @@ return array(
     	'jquery-ui.min.js',
     	'ajax-record-tabs.js',
         'eu-cookies.js',
-        'async-holdings-statuses.js'
     ),
     'less' => array(
         'active' => false,
@@ -42,6 +42,7 @@ return array(
             'search' => 'VuFind\View\Helper\Bootstrap3\Search',
             'vudl' => 'VuDL\View\Helper\Bootstrap3\VuDL',
             'renderarray' => 'CPK\View\Helper\CPK\RenderArray',
+            'currenturl' => 'CPK\View\Helper\CPK\CurrentURL',
         )
     )
 );

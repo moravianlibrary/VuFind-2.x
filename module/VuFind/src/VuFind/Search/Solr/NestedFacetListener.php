@@ -47,6 +47,9 @@ use Zend\ServiceManager\ServiceLocatorInterface;
  */
 class NestedFacetListener
 {
+
+    const SOLR_LOCAL_PARAMS = "/(\\{[^\\}]*\\})*(\S+)/";
+
     /**
      * Backend.
      *
@@ -61,6 +64,16 @@ class NestedFacetListener
     protected $nestedFacets = [];
 
     /**
+     *
+     *
+     */
+    protected $orFacets = [];
+
+    protected $allFacetsAreOr = false;
+
+    protected $enabledForAllFacets = false;
+
+    /**
      * Constructor.
      *
      * @param BackendInterface $backend   Backend
@@ -68,10 +81,15 @@ class NestedFacetListener
      *
      * @return void
      */
-    public function __construct(BackendInterface $backend, $nestedFacets)
+    public function __construct(BackendInterface $backend, $nestedFacets, $orFacets, $enabledForAllFacets = false)
     {
         $this->backend = $backend;
         $this->nestedFacets = $nestedFacets;
+        $this->orFacets = $orFacets;
+        $this->enabledForAllFacets = $enabledForAllFacets;
+        if (!empty($this->orFacets) && $this->orFacets[0] == "*") {
+            $this->allFacetsAreOr = true;
+        }
     }
 
     /**
@@ -111,36 +129,66 @@ class NestedFacetListener
         if (!$params) {
             return;
         }
-        $data = [];
-        foreach ($this->nestedFacets as $field) {
-            $data[$field] = [
-                'type' => 'terms',
-                'field' => $field,
-                'domain' => [ 'blockChildren' => 'merged_boolean:true' ]
-            ];
-        }
-        $params->set('json.facet', json_encode($data));
-        $fqs = $params->get('fq');
-        if (is_array($fqs) && !empty($fqs)) {
-            $newfq = array();
-            foreach ($fqs as &$query) {
-                if ($this->isChildrenFacetQuery($query)) {
-                    $newfq[] = "{!parent which='merged_boolean:true'}" . $query;
-                } else {
-                    $newfq[] = $query;
+
+        $facets = $this->nestedFacets;
+        if ($this->enabledForAllFacets) {
+            foreach ($params->get('facet.field') as $facetField) {
+                if (preg_match(self::SOLR_LOCAL_PARAMS, $facetField, $matches)) {
+                    $facets[] = $matches[2];
                 }
             }
-            $params->set('fq', $newfq);
+            $params->remove('facet.field');
+        }
+
+        $data = [];
+        foreach ($facets as $facetField) {
+            $data[$facetField] = $this->getFacetConfig($facetField);
+        }
+        if (!empty($data)) {
+            $params->set('json.facet', json_encode($data));
+        }
+
+        $fqs = $params->get('fq');
+        if (is_array($fqs) && !empty($fqs)) {
+            $newfqs = array();
+            foreach ($fqs as &$query) {
+                $newfqs[] = $this->transformFacetQuery($query);
+            }
+            $params->set('fq', $newfqs);
         }
     }
 
-    protected function isChildrenFacetQuery($fq) {
-        list($field, $query) = explode(":", $fq);
+    protected function getFacetConfig($field) {
+        $data = [
+                'type' => 'terms',
+                'field' => $field
+        ];
+        if (in_array($field, $this->nestedFacets)) {
+            $data['domain'] = [ 'blockChildren' => 'merged_boolean:true' ];
+        }
+        if ($this->allFacetsAreOr || in_array($field, $this->orFacets)) {
+            $data['excludeTags'] = [ $field . '_filter' ];
+        }
+        return $data;
+    }
+
+    protected function transformFacetQuery($fq) {
+        list($field, $query) = explode(":", $fq, 2);
+        $params = null;
         $matches = [];
-        if (preg_match("/(\\{[^\\}]*\\})*(\S+)/", $field, $matches)) {
+        if (preg_match(self::SOLR_LOCAL_PARAMS, $field, $matches)) {
+            $params = $matches[1];
             $field = $matches[2];
         }
-        return in_array($field, $this->nestedFacets);
+        if (!in_array($field, $this->nestedFacets)) {
+            return $fq;
+        }
+        if ($params != null) {
+            $params = rtrim($params, "}") . " parent which='merged_boolean:true'" . "}";
+            return $params . $field . ':' . $query;
+        } else {
+            return "{!parent which='merged_boolean:true'}" . $fq;
+        }
     }
 
 }

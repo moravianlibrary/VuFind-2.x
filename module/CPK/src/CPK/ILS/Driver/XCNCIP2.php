@@ -81,7 +81,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
     protected $timeout = null;
 
-    protected $eppnScope = null;
+    protected $logo = null;
 
     /**
      * Set the HTTP service to be used for HTTP requests.
@@ -135,8 +135,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         if (isset($this->config['Catalog']['timeout']))
             $this->timeout = intval($this->config['Catalog']['timeout']);
 
-        if (isset($this->config['Catalog']['eppnScope']))
-            $this->eppnScope = $this->config['Catalog']['eppnScope'];
+        if (isset($this->config['Catalog']['logo']))
+            $this->logo = $this->config['Catalog']['logo'];
 
         $this->requests = new NCIPRequests();
     }
@@ -583,11 +583,10 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      */
     public function placeHold($holdDetails)
     {
-        // var_dump($holdDetails);
-        $request = $this->requests->placeHold($holdDetails);
-        // var_dump($request);
+        $patron = $holdDetails['patron'];
+        list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
+        $request = $this->requests->requestItem($patron, $holdDetails);
         $response = $this->sendRequest($request);
-        // var_dump($response);
         return array(
             'success' => true,
             'sysMessage' => ''
@@ -1210,11 +1209,11 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         $blocksParsed = $this->useXPath($response,
             'LookupUserResponse/UserOptionalFields/BlockOrTrap/BlockOrTrapType');
 
-        $eppnScope = $this->eppnScope;
+        $logo = $this->logo;
 
         foreach ($blocksParsed as $block) {
-            if (! empty($eppnScope)) {
-                $blocks[$eppnScope] = (string) $block;
+            if (! empty($logo)) {
+                $blocks[$logo] = (string) $block;
             } else
                 $blocks[] = (string) $block;
         }
