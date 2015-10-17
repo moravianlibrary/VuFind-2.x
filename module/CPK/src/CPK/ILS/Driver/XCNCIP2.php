@@ -147,7 +147,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      * @param string $xml
      *            XML request document
      *
-     * @return object SimpleXMLElement parsed from response
+     * @return \SimpleXMLElement parsed from response
      */
     protected function sendRequest($xml)
     {
@@ -249,63 +249,81 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      */
     public function cancelHolds($cancelDetails)
     {
-        $holds = $this->getMyHolds($cancelDetails['patron']);
+        $patron = $cancelDetails['patron'];
+        list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
+        $holds = $this->getMyHolds($patron);
         $items = array();
-        foreach ($cancelDetails['details'] as $recent) {
-            foreach ($holds as $onehold) {
-                if ($onehold['id'] == $recent) {
-                    if (empty($onehold['item_id'])) { // This means we found an biblio-leveled reserve
-                        $request_id = $onehold['reqnum'];
 
-                        if (empty($request_id)) {
+        $problemValue = null;
+
+        $desiredRequestFound = $problemOccurred = false;
+
+        foreach ($cancelDetails['details'] as $recent) {
+            foreach ($holds as $hold) {
+                if ($hold['item_id'] == $recent) { // Item-leveled cancel request
+
+                    $desiredRequestFound = true;
+
+                    $request = $this->requests->cancelRequestItemUsingItemId($patron, $recent);
+                    $response = $this->sendRequest($request);
+
+                    $problem = $this->useXPath($response, 'NCIPMessage/CancelRequestItemResponse/Problem');
+
+                    if ($problem !== false && is_array($problem) && count($problem) > 0) {
+                        $problemValue = $this->getFirstXPathMatchAsString($problem[0], 'ProblemValue');
+                        $problemDetail = $this->getFirstXPathMatchAsString($problem[0], 'ProblemDetail');
+
+                        $problemOccurred = true;
+                    }
+
+                    //$rawResponse = $response->asXML();
+
+                    break;
+                } else
+                    if ($hold['id'] == $recent) { // Biblio-leveled cancel request
+
+                        $request_id = $hold['reqnum'];
+
+                        if (! $request_id > 0) {
                             $message = 'XCNCIP2 Driver cannot cancel biblio-leveled request without request id!';
 
                             $this->addEnviromentalException($message);
                             throw new ILSException($message);
                         }
 
-                        $item_id = null;
-                    } else {
-                        $request_id = null;
-                        $item_id = $onehold['item_id'];
+                        $desiredRequestFound = true;
+
+                        $request = $this->requests->cancelRequestItemUsingRequestId($patron, $request_id);
+                        $response = $this->sendRequest($request);
+
+                        $problem = $this->useXPath($response, 'NCIPMessage/CancelRequestItemResponse/Problem');
+
+                        if ($problem !== false && is_array($problem) && count($problem) > 0) {
+                            $problemValue = $this->getFirstXPathMatchAsString($problem[0], 'ProblemValue');
+                            $problemDetail = $this->getFirstXPathMatchAsString($problem[0], 'ProblemDetail');
+
+                            $problemOccurred = true;
+                        }
+
+                        //$rawResponse = $response->asXML();
+                        break;
                     }
-                    break;
-                }
             }
-            if (empty($item_id) && empty($request_id)) {
-                $items[$recent] = array(
-                    'success' => false,
-                    'status' => '',
-                    'sysMessage' => ''
-                );
-            } elseif (! empty($item_id)) {
-                $request = $this->requests->cancelHoldUsingItemId($item_id,
-                    $cancelDetails['patron']['id']);
-                $response = $this->sendRequest($request);
-                // TODO: Process Problem elements
 
-                $items[$item_id] = array(
-                    'success' => true,
-                    'status' => '',
-                    'sysMessage' => ''
-                );
-            } else {
-                $request = $this->requests->cancelHoldUsingRequestId($request_id,
-                    $cancelDetails['patron']['id']);
-                $response = $this->sendRequest($request);
-                // TODO: Process Problem elements
+            $didWeTheJob = $desiredRequestFound && ! $problemOccurred;
 
-                $items[$item_id] = array(
-                    'success' => true,
-                    'status' => '',
-                    'sysMessage' => ''
-                );
-            }
+            $items[$recent] = array(
+                'success' => $didWeTheJob,
+                'status' => '',
+                'sysMessage' => isset($problemValue) ?:''
+            );
         }
+
         $retVal = array(
             'count' => count($items),
             'items' => $items
         );
+
         return $retVal;
     }
 
@@ -322,9 +340,11 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      */
     public function renewMyItems($renewDetails)
     {
+        $patron = $renewDetails['patron'];
+        list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
         $result = array();
         foreach ($renewDetails['details'] as $item) {
-            $request = $this->requests->renewMyItem($renewDetails['patron'], $item);
+            $request = $this->requests->renewItem($patron, $item);
             $response = $this->sendRequest($request);
             $date = $this->useXPath($response, 'RenewItemResponse/DateForReturn');
             $result[$item] = array(
@@ -405,7 +425,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      */
     public function getCancelHoldDetails($holdDetails)
     {
-        return $holdDetails['id'];
+        return $holdDetails['item_id'];
     }
 
     /**
@@ -779,24 +799,33 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
             foreach ($bibInfos as $bibInfo) {
 
-                $id = (string) $this->useXPath($bibInfo,
-                    'BibliographicId/BibliographicRecordId/BibliographicRecordIdentifier')[0];
+                $id = $this->getFirstXPathMatchAsString($bibInfo,
+                    'BibliographicId/BibliographicRecordId/BibliographicRecordIdentifier');
 
-                $status = (string) $this->useXPath($bibInfo,
-                    'HoldingsSet/ItemInformation/ItemOptionalFields/CirculationStatus')[0];
+                $status = $this->getFirstXPathMatchAsString($bibInfo,
+                    'HoldingsSet/ItemInformation/ItemOptionalFields/CirculationStatus');
 
-                $itemCallNo = (string) $this->useXPath($bibInfo,
-                    'HoldingsSet/ItemInformation/ItemOptionalFields/ItemDescription/CallNumber')[0];
+                $itemCallNo = $this->getFirstXPathMatchAsString($bibInfo,
+                    'HoldingsSet/ItemInformation/ItemOptionalFields/ItemDescription/CallNumber');
 
-                $holdQueue = (string) $this->useXPath($bibInfo,
-                    'HoldingsSet/ItemInformation/ItemOptionalFields/HoldQueueLength')[0];
+                $holdQueue = $this->getFirstXPathMatchAsString($bibInfo,
+                    'HoldingsSet/ItemInformation/ItemOptionalFields/HoldQueueLength');
 
                 $itemRestrictions = $this->useXPath($bibInfo,
                     'HoldingsSet/ItemInformation/ItemOptionalFields/ItemUseRestrictionType');
 
+                $restrictedToLibrary = false;
+                $monthLoanPeriod = false;
+
                 $restrictions = [];
                 foreach ($itemRestrictions as $itemRestriction) {
                     $restrictions[] = (string) $itemRestriction;
+
+                    $restrictedToLibrary = ($itemRestriction == 'In Library Use Only');
+
+                    $monthLoanPeriod = ($itemRestriction ==
+                         'Limited Circulation, Normal Loan Period') ||
+                         empty($itemRestriction);
                 }
 
                 $locationNameInstances = $this->useXPath($bibInfo,
@@ -805,44 +834,45 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 foreach ($locationNameInstances as $locationNameInstance) {
                     // FIXME: Create config to map location abbreviations of each institute into human readable values
 
-                    $locationLevel = (string) $this->useXPath($locationNameInstance,
-                        '//LocationNameLevel')[0];
+                    $locationLevel = $this->getFirstXPathMatchAsString(
+                        $locationNameInstance, '//LocationNameLevel');
 
                     if ($locationLevel == 4) {
-                        $department = (string) $this->useXPath($locationNameInstance,
-                            '//LocationNameValue')[0];
+                        $department = $this->getFirstXPathMatchAsString(
+                            $locationNameInstance, '//LocationNameValue');
                     } else
                         if ($locationLevel == 3) {
-                            $sublibrary = (string) $this->useXPath(
-                                $locationNameInstance, '//LocationNameValue')[0];
+                            $sublibrary = $this->getFirstXPathMatchAsString(
+                                $locationNameInstance, '//LocationNameValue');
                         } else {
-                            $locationInBuilding = (string) $this->useXPath(
-                                $locationNameInstance, '//LocationNameValue')[0];
+                            $locationInBuilding = $this->useXPath(
+                                $locationNameInstance, '//LocationNameValue');
                         }
                 }
 
                 $available = $status === 'Available On Shelf';
 
-                $restrictedToLibrary = ($itemRestriction == 'In Library Use Only');
-
-                $monthLoanPeriod = ($itemRestriction ==
-                     'Limited Circulation, Normal Loan Period') ||
-                     empty($itemRestriction);
+                $label = 'label-danger';
+                if ($status === 'Available On Shelf')
+                    $label = 'label-success';
+                else
+                    if ($status === 'On Loan')
+                        $label = 'label-warning';
 
                 $retVal[] = array(
                     'id' => empty($id) ? "" : $id,
-                    'availability' => empty($available) ? false : $available ? true : false,
                     'status' => empty($status) ? "" : $status,
                     'location' => empty($locationInBuilding) ? "" : $locationInBuilding,
                     'sub_lib_desc' => empty($sublibrary) ? '' : $sublibrary,
                     'department' => empty($department) ? '' : $department,
                     'requests_placed' => ! isset($holdQueue) ? "" : $holdQueue,
                     'item_id' => empty($id) ? "" : $id,
-                    'hold_type' => isset($holdQueue) && intval($holdQueue) > 0 ? 'Recall This' : 'Place a Hold'
+                    'label' => $label,
+                    'hold_type' => isset($holdQueue) && intval($holdQueue) > 0 ? 'Recall This' : 'Place a Hold',
+                    'restrictions' => $restrictions
                 );
             }
         }
-
         return $retVal;
     }
 
@@ -1017,7 +1047,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'LookupItemResponse/ItemOptionalFields/BibliographicDescription/Author');
             $title = $this->useXPath($additResponse,
                 'LookupItemResponse/ItemOptionalFields/BibliographicDescription/Title');
-            if (empty($title) || $title[0] == '') $title = $this->useXPath($current, 'Title');
+            if (empty($title) || $title[0] == '')
+                $title = $this->useXPath($current, 'Title');
             $mediumType = $this->useXPath($additResponse,
                 'LookupItemResponse/ItemOptionalFields/BibliographicDescription/MediumType');
 
@@ -1196,6 +1227,9 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             if ($this->useXPath($recent, 'ElectronicAddressType')[0] == 'tel') {
                 $phone = $this->useXPath($recent, 'ElectronicAddressData');
             }
+            if ($this->useXPath($recent, 'ElectronicAddressType')[0] == 'mailto') {
+                $email = $this->useXPath($recent, 'ElectronicAddressData');
+            }
         }
         $group = $this->useXPath($response,
             'LookupUserResponse/UserOptionalFields/UserPrivilege/UserPrivilegeDescription');
@@ -1231,6 +1265,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             'phone' => empty($phone) ? '' : (string) $phone[0],
             'group' => empty($group) ? '' : (string) $group[0],
             'blocks' => empty($blocks) ? array() : $blocks,
+            'email' => empty($email) ? '' : (string) $email[0],
             'expire' => $expireDate
         );
         return $patron;
@@ -1478,7 +1513,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         $_ENV['exceptions']['ncip'][] = $message;
     }
 
-    protected function useXPath($xmlObject, $xPath)
+    protected function useXPath(\SimpleXMLElement $xmlObject, $xPath)
     {
         $arrayXPath = explode('/', $xPath);
         $newXPath = "";
@@ -1493,6 +1528,25 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         }
         // var_dump($newXPath);
         return $xmlObject->xpath($newXPath);
+    }
+
+    /**
+     *
+     * @param \SimpleXMLElement $xmlObject
+     * @param string $xPath
+     * @return boolean false || string
+     */
+    protected function getFirstXPathMatchAsString(\SimpleXMLElement $xmlObject,
+        $xPath)
+    {
+        $xPathMatch = $this->useXPath($xmlObject, $xPath);
+
+        if ($xPathMatch !== false && is_array($xPathMatch)) {
+            if (count($xPathMatch) > 0) {
+                return (string) $xPathMatch[0];
+            }
+        }
+        return false;
     }
 
     /**
@@ -1542,54 +1596,6 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
  */
 class OldNCIPRequests
 {
-
-    /**
-     * Build NCIP request XML for cancel holds.
-     *
-     * @param array $cancelDetails
-     *            Patron's information and details about cancel request.
-     *
-     * @return string XML request
-     */
-    public function cancelHoldUsingItemId($itemID, $patronID)
-    {
-        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-             '<ns1:NCIPMessage xmlns:ns1="http://www.niso.org/2008/ncip" ns1:version' .
-             '="http://www.niso.org/schemas/ncip/v2_02/ncip_v2_02.xsd"><ns1:CancelRequestItem>' .
-             '<ns1:UserId><ns1:UserIdentifierValue>' . htmlspecialchars($patronID) .
-             '</ns1:UserIdentifierValue></ns1:UserId>' .
-             '<ns1:ItemId><ns1:ItemIdentifierValue>' . htmlspecialchars($itemID) .
-             '</ns1:ItemIdentifierValue></ns1:ItemId>' .
-             '<ns1:RequestType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requesttype/requesttype.scm">Hold</ns1:RequestType>' .
-             '<ns1:RequestScopeType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requestscopetype/requestscopetype.scm">Item</ns1:RequestScopeType>' .
-             '</ns1:CancelRequestItem></ns1:NCIPMessage>';
-        return $xml;
-    }
-
-    /**
-     * Build NCIP request XML for cancel holds.
-     *
-     * @param array $cancelDetails
-     *            Patron's information and details about cancel request.
-     *
-     * @return string XML request
-     */
-    public function cancelHoldUsingRequestId($requestID, $patronID)
-    {
-        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-             '<ns1:NCIPMessage xmlns:ns1="http://www.niso.org/2008/ncip" ns1:version' .
-             '="http://www.niso.org/schemas/ncip/v2_02/ncip_v2_02.xsd"><ns1:CancelRequestItem>' .
-             '<ns1:UserId><ns1:UserIdentifierValue>' . htmlspecialchars($patronID) .
-             '</ns1:UserIdentifierValue></ns1:UserId>' .
-             '<ns1:RequestId><ns1:RequestIdentifierValue>' .
-             htmlspecialchars($requestID) .
-             '</ns1:RequestIdentifierValue></ns1:RequestId>' .
-             '<ns1:RequestType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requesttype/requesttype.scm">Hold</ns1:RequestType>' .
-             '<ns1:RequestScopeType ns1:Scheme="http://www.niso.org/ncip/v1_0/imp1/schemes/requestscopetype/requestscopetype.scm">Item</ns1:RequestScopeType>' .
-             '</ns1:CancelRequestItem></ns1:NCIPMessage>';
-        return $xml;
-    }
-
     /**
      * Build NCIP request XML for item status information.
      *
@@ -1942,27 +1948,6 @@ class OldNCIPRequests
              $pickupLocation .
              '<ns1:PickupExpiryDate>2014-09-30T00:00:00</ns1:PickupExpiryDate>' .
              '</ns1:RequestItem></ns1:NCIPMessage>';
-        return $xml;
-    }
-
-    /**
-     * Build the NCIP request XML to renew patron's items.
-     *
-     * @param array $patron
-     * @param string $item
-     *
-     * @return string NCIP request XML
-     */
-    public function renewMyItem($patron, $item)
-    {
-        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-             '<ns1:NCIPMessage xmlns:ns1="http://www.niso.org/2008/ncip" ns1:version' .
-             '="http://www.niso.org/schemas/ncip/v2_02/ncip_v2_02.xsd"><ns1:RenewItem>' .
-             '<ns1:UserId>' . '<ns1:UserIdentifierValue>' .
-             htmlspecialchars($patron['id']) . '</ns1:UserIdentifierValue>' .
-             '</ns1:UserId>' . '<ns1:ItemId>' . '<ns1:ItemIdentifierValue>' .
-             htmlspecialchars($item) . '</ns1:ItemIdentifierValue>' . '</ns1:ItemId>' .
-             '</ns1:RenewItem></ns1:NCIPMessage>';
         return $xml;
     }
 }

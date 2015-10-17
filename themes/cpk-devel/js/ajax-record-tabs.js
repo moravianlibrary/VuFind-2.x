@@ -1,3 +1,11 @@
+/**
+ * Gets Buy Links via AjaxController
+ * 
+ * @param	{string}	recordID
+ * @param	{string}	parentRecordID
+ * @param	{function}	callback
+ * @return	{undefined}
+ */
 function getBuyLinks( recordID, parentRecordID, callback ) {
 	$.ajax({
 		dataType: 'json',
@@ -15,14 +23,28 @@ function getBuyLinks( recordID, parentRecordID, callback ) {
 	});
 }
 
-function getSfxJibResult( sfxUrl, recordID, institute, arrayOf866 ) {
-	var institute = typeof institute !== 'undefined' ? institute : 'ANY';
+/**
+ * Prints SFX JIB Results
+ * 
+ * @param	{string}	sfxUrl
+ * @param	{string}	recordID
+ * @param	{string}	institute
+ * @param	{array}		arrayOf866
+ * @return	{undefined}	
+ */
+function getSfxJibResult( recordID, sourceInstitute, arrayOf866 ) {
+	
+	/**
+	 * Institute ID.
+	 * @type {string}
+	 */
+	var sourceInstitute = typeof sourceInstitute !== 'undefined' ? sourceInstitute : 'default';
 
 	$.ajax({
 		dataType: 'json',
 		async: true,
-		url: '/AJAX/JSON?method=callSfx',
-		data: { recordID: recordID, institute: institute, sfxUrl: sfxUrl },
+		url: '/AJAX/JSON?method=callLinkServer',
+		data: { recordID: recordID, sourceInstitute: sourceInstitute },
 		success: function( sfxJibResult ) {
 
 			if( sfxJibResult.status !== 'OK' ) {
@@ -56,7 +78,15 @@ function getSfxJibResult( sfxUrl, recordID, institute, arrayOf866 ) {
 	});
 }
 
-function get866( recordUniqueID, parentRecordID, callback ) {
+/**
+ * Gets Buy Links via AjaxController
+ * 
+ * @param	{string}	recordID
+ * @param	{string}	parentRecordID
+ * @param	{function}	callback
+ * @return	{undefined}
+ */
+function get866( recordUniqueID, parentRecordID, sourceInstitute, callback ) {
 	$.ajax({
 		dataType: 'json',
 		async: true,
@@ -68,15 +98,28 @@ function get866( recordUniqueID, parentRecordID, callback ) {
 				$( "#ajax-error-info" ).empty().append( response.data );
 			} else {
 				console.log( response );
-				callback( recordUniqueID, response['data'][0]['field866'] );
+				callback( recordUniqueID, response['data'][0]['field866'], sourceInstitute );
 			}
 		}
 	});
 }
 
-
-function display866( recordUniqueID, rawDataArrayOf866 ) {
+/**
+ * Downloads SFX JIB content for current record 
+ * and displays it via getSfxJibResult() callback
+ * 
+ * @param	{string}	recordUniqueID
+ * @param	{array}		rawDataArrayOf866
+ * @return	{getSfxJibResult}
+ */
+function display866( recordUniqueID, rawDataArrayOf866, sourceInstitute ) {
+	
+	/**
+	 * Array of values from field 866
+	 * @type {array}
+	 */
 	var arrayOf866 = {};
+	
 	if (false != rawDataArrayOf866) {
 		rawDataArrayOf866.forEach(function(entry) {
 			var pole = entry.split("|");
@@ -87,7 +130,7 @@ function display866( recordUniqueID, rawDataArrayOf866 ) {
 			}
 		});
 
-		getSfxJibResult('http://sfx.jib.cz/sfxlcl3', recordUniqueID, 'ANY', arrayOf866);
+		getSfxJibResult(recordUniqueID, sourceInstitute, arrayOf866);
 
 	}
 }

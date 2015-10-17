@@ -1,27 +1,30 @@
 $(getHoldingStatuses); // Launch this function onLoad event
 
-
 // Async holdings loader
 function getHoldingStatuses(ids) {
-    // TODO: Make the request cancellable after user chooses any filter
 
     if (typeof ids !== 'object')
 	ids = getHoldingsIds();
 
-    var ajaxResponse = $.ajax({
-	type : 'POST',
-	url : '/AJAX/JSON?method=getHoldingsStatuses',
-	dataType : 'json',
-	async : true,
-	// json object to sent to the authentication url
-	data : {
-	    ids : ids
-	},
-	success : function(response) {
-	    processGetHoldingStatusesResponse(response);
-	}
-    })
-
+    if (ids.length != 0) {
+	$.ajax({
+	    type : 'POST',
+	    url : '/AJAX/JSON?method=getHoldingsStatuses',
+	    dataType : 'json',
+	    async : true,
+	    // json object to sent to the authentication url
+	    data : {
+		ids : ids
+	    },
+	    success : function(response) {
+		processGetHoldingStatusesResponse(response);
+	    },
+	    error : function(msg) {
+		// TODO: Think about showing the error somewhere somehow..
+		// alert(msg.toSource());
+	    }
+	})
+    }
 }
 
 function getHoldingsIds(includingBeingLoadedIds) {
@@ -49,9 +52,9 @@ function getAllNotLoadedHoldings(includingBeingLoaded) {
     var selector;
 
     if (includingBeingLoaded) {
-	selector = 'tr[data-type=holding]:not(.loaded)';
+	selector = 'tr[data-type=holding]:not(.loaded):not([hidden=hidden])';
     } else {
-	selector = 'tr[data-type=holding]:not(.loading, .loaded)';
+	selector = 'tr[data-type=holding]:not(.loading, .loaded):not([hidden=hidden])';
     }
 
     return $(selector);
@@ -118,6 +121,14 @@ function updateHoldingId(id, value, setDangerLabel) {
 	setDangerLabel = true;
     }
 
+    var availability = value.availability;
+
+    if (typeof availability !== 'undefined') {
+	var availabilitySpan = tableRow.find('span[data-type=availability]')[0];
+	
+	availabilitySpan.textContent = availability;
+    }
+
     var divLink = tableRow.find('div[data-type=link]')[0];
 
     var dueDate = value.due_date;
@@ -155,7 +166,7 @@ function updateHoldingId(id, value, setDangerLabel) {
 		} else if (holdType === 'false') {
 		    divLink.remove();
 		    break toBeBroken;
-		}		
+		}
 
 		linkSpan.innerHTML = holdType;
 

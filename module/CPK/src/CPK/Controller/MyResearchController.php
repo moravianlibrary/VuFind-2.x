@@ -136,10 +136,6 @@ class MyResearchController extends MyResearchControllerBase
             return $this->forwardTo('MyResearch', 'Home');
         }
 
-        $identities = $user->getLibraryCards();
-
-        $viewVars = $libraryIdentities = [];
-
         // Connect to the ILS:
         $catalog = $this->getILS();
 
@@ -151,63 +147,86 @@ class MyResearchController extends MyResearchControllerBase
         else
             $isSynchronous = true;
 
-        $viewVars['isSynchronous'] = $isSynchronous;
+        $viewVars = $patrons = [];
 
+        $identities = $user->getLibraryCards();
+
+        // Process cancel jobs if any ..
         foreach ($identities as $identity) {
 
             $patron = $user->libCardToPatronArray($identity);
+
             // Start of VuFind/MyResearch/holdsAction
 
             // Process cancel requests if necessary:
             $cancelStatus = $catalog->checkFunction('cancelHolds', compact('patron'));
-            $currentIdentityView = $this->createViewModel();
-            $currentIdentityView->cancelResults = $cancelStatus ? $this->holds()->cancelHolds(
-                $catalog, $patron) : [];
+            $patron['cancelResults'] = $cancelStatus ? $this->holds()->cancelHolds(
+                $catalog, $patron, $isSynchronous) : [];
             // If we need to confirm
-            if (! is_array($currentIdentityView->cancelResults)) {
-                return $currentIdentityView->cancelResults;
+            if (! is_array($patron['cancelResults'])) {
+                return $patron['cancelResults'];
             }
 
-            // By default, assume we will not need to display a cancel form:
-            $currentIdentityView->cancelForm = false;
-
-            // Get held item details:
-            $result = $catalog->getMyHolds($patron);
-            $recordList = [];
-            $this->holds()->resetValidation();
-            foreach ($result as $current) {
-                // Add cancel details if appropriate:
-                $current = $this->holds()->addCancelDetails($catalog, $current,
-                    $cancelStatus);
-                if ($cancelStatus && $cancelStatus['function'] != "getCancelHoldLink" &&
-                     isset($current['cancel_details'])) {
-                    // Enable cancel form if necessary:
-                    $currentIdentityView->cancelForm = true;
-                }
-
-                // Build record driver:
-                $recordList[] = $this->getDriverForILSRecord($current);
-            }
-
-            // Get List of PickUp Libraries based on patron's home library
-            try {
-                $currentIdentityView->pickup = $catalog->getPickUpLocations($patron);
-            } catch (\Exception $e) {
-                // Do nothing; if we're unable to load information about pickup
-                // locations, they are not supported and we should ignore them.
-            }
-            $currentIdentityView->recordList = $recordList;
-            // End of VuFind/MyResearch/holdsAction
-
-            // Start of MZKCommon/MyResearch/holdsAction
-            $currentIdentityView = $this->addViews($currentIdentityView);
-            // End of MZKCommon/MyResearch/holdsAction
-
-            $libraryIdentities[$identity['eppn']] = $currentIdentityView;
+            $eppn = $patron['eppn'];
+            $patrons[$eppn] = $patron;
         }
 
-        $viewVars['libraryIdentities'] = $libraryIdentities;
+        $this->holds()->resetValidation();
+
+            // Now process actual holds rendering
+        foreach ($patrons as $eppn => $patron) {
+
+            $currentIdentityView = $this->createViewModel();
+
+
+                // Append cancelResults from previous iteration ..
+            $currentIdentityView->cancelResults = $patron['cancelResults'];
+
+            if ($isSynchronous) {
+                // Get held item details:
+                $result = $catalog->getMyHolds($patron);
+                $recordList = [];
+
+                // Let's assume there is not avaiable any cancelling
+                $currentIdentityView->cancelForm = false;
+
+                foreach ($result as $current) {
+                    // Add cancel details if appropriate:
+                    $current = $this->holds()->addCancelDetails($catalog, $current,
+                        $cancelStatus);
+                    if ($cancelStatus &&
+                         $cancelStatus['function'] != "getCancelHoldLink" &&
+                         isset($current['cancel_details'])) {
+                        // Enable cancel form if necessary:
+                        $currentIdentityView->cancelForm = true;
+                    }
+
+                    // Build record driver:
+                    $recordList[] = $this->getDriverForILSRecord($current);
+                }
+
+                // Get List of PickUp Libraries based on patron's home library
+                try {
+                    $currentIdentityView->pickup = $catalog->getPickUpLocations(
+                        $patron);
+                } catch (\Exception $e) {
+                    // Do nothing; if we're unable to load information about pickup
+                    // locations, they are not supported and we should ignore them.
+                }
+                $currentIdentityView->recordList = $recordList;
+            } else // This means we have async deal ..
+                $currentIdentityView->cat_username = $patron['cat_username'];
+
+            // Unknown purpose .. copied from parent MZKCommon ..
+            $currentIdentityView = $this->addViews($currentIdentityView);
+
+            $viewVars['libraryIdentities'][$eppn] = $currentIdentityView;
+        }
+
         $viewVars['logos'] = $user->getIdentityProvidersLogos();
+
+        $viewVars['isSynchronous'] = $isSynchronous;
+
         $view = $this->createViewModel($viewVars);
         $this->flashExceptions($this->flashMessenger());
         return $view;
@@ -342,11 +361,18 @@ class MyResearchController extends MyResearchControllerBase
         else
             $entityIdInitiatedWith = null;
 
-            // Stop now if the user does not have valid catalog credentials available:
-        if (empty($entityIdInitiatedWith) && ! is_array(
-            $patron = $this->catalogLogin()) &&
-             ! $this->isLoggedInWithDummyDriver($patron)) {
+        $patron = $this->catalogLogin();
+
+        // We can't really determine if is user logged in if entityIdInitiatedWith is provided
+        // We have to leave this on ShibbolethIdentityManager ..
+        $haveToLogin = ! is_array($patron) &&
+             ! $this->isLoggedInWithDummyDriver($patron) &&
+             empty($entityIdInitiatedWith);
+
+        // Stop now if the user does not have valid catalog credentials available:
+        if ($haveToLogin) {
             $this->flashExceptions($this->flashMessenger());
+            $this->clearFollowupUrl();
             return $patron;
         }
 
@@ -371,7 +397,7 @@ class MyResearchController extends MyResearchControllerBase
                 $this->clearFollowupUrl();
 
             try {
-                $user = $this->getAuthManager()->connectIdentity();
+                $user = $this->getAuthManager()->consolidateIdentity();
             } catch (AuthException $e) {
                 $this->processAuthenticationException($e);
             }
@@ -487,7 +513,9 @@ class MyResearchController extends MyResearchControllerBase
 
     protected function isLoggedInWithDummyDriver($user)
     {
-        return $user ? $user['home_library'] == "Dummy" : false;
+        if ($user instanceof \Zend\View\Model\ViewModel)
+            return false;
+        return isset($user['home_library']) ? $user['home_library'] == "Dummy" : false;
     }
 
     protected function processBlocks($profile, $logos)

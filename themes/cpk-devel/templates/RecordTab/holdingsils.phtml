@@ -7,17 +7,24 @@ $this->headScript()->appendFile('async-holdingsils.js');
 
 // Set up convenience variables:
 $holdings = $this->driver->getRealTimeHoldings();
+$filters = $this->parseFilterOptions($holdings, $config);
+$firstYearFilter = null;
+
+if ($filters !== false)
+    $this->headScript()->appendFile('async-holdingsils-filters-handler.js');
+
 $authManager = $this->auth()->getManager();
 $user = $authManager->isLoggedIn();
 
-$canReserveThisInstitution = $authManager->canReserveWithinInstitution($holdings, $user);
+$canReserveThisInstitution = $authManager->canReserveWithinInstitution($holdings,
+    $user);
 
 $offlineMode = $this->ils()->getOfflineMode();
 // Account for replace_other_urls setting
 
 // Set page title.
 $this->headTitle(
-    $this->translate('Holdings') . ': ' . $this->driver->getBreadcrumb());
+    $this->driver->getBreadcrumb());
 ?>
 <? if ($offlineMode == "ils-offline"): ?>
 <div class="alert alert-warning">
@@ -43,6 +50,51 @@ $this->headTitle(
 
 <? if (! empty($holdings)) : ?>
 <table class="table table-view" id="no-more-tables">
+    <? if ($filters !== false): ?>
+      <caption>
+        <div class="col-md-2"></div>
+		<div class="col-md-4">
+		  <? if (! empty($filters['year'])): ?>
+
+			<label for="year"><?=$this->transEsc('Year filter')?>: </label> <select
+				name="year" id="year_filter">
+				<option value="ALL"><?=$this->transEsc('All')?></option>
+				<?
+
+            $isFirst = true;
+            foreach ($filters['year'] as $yearFilter) {
+                $yearFilterEscaped = preg_replace('/([.:])/', '\\\${1}', $yearFilter);
+
+                if ($isFirst) { // Select first year available ..
+                    echo "<option value='$yearFilterEscaped' selected>$yearFilter</option>";
+                    $firstYearFilter = $yearFilter;
+
+                    $isFirst = false;
+                } else
+                    echo "<option value='$yearFilter'>$yearFilter</option>";
+            }
+            ?>
+			</select>
+		  <? endif; ?>
+		</div>
+		<div class="col-md-4">
+		  <? if (! empty($filters['volume'])): ?>
+			<label for="volume"><?=$this->transEsc('Volume filter')?>: </label>
+			<select name="volume" id="volume_filter">
+				<option value="ALL"><?=$this->transEsc('All')?></option>
+				<?
+
+            foreach ($filters['volume'] as $volumeFilter) {
+                $volumeFilterEscaped = preg_replace('/([.:])/', '\\\${1}', $volumeFilter);
+                echo "<option value='$volumeFilterEscaped'>$volumeFilter</option>\n";
+            }
+            ?>
+			</select>
+		  <? endif; ?>
+		</div>
+		<div class="col-md-2"></div>
+	</caption>
+    <? endif; ?>
 	<thead>
 		<tr>
 			<th><?=$this->transEsc("Status")?>&nbsp;</th>
@@ -60,15 +112,16 @@ $this->headTitle(
   <?
         $rowNo ++;
 
+        // Build holding ID to query ILS for status
         if (isset($row['agency_id']) && isset($row['item_id']))
             $itemId = $row['agency_id'] . ':' . $row['item_id'];
         elseif (isset($row['item_id']))
             $itemId = $row['item_id'];
         else
-            $itemId = null;
+            $itemId = false;
 
-        $row['uniqueRowId'] = (isset($row['source']) && ! empty($itemId)) ? $row['source'] .
-             '.' . $itemId : null;
+        $uniqueRowId = (isset($row['source']) && $itemId !== false) ? $row['source'] .
+             '.' . $itemId : false;
 
         // Create link for reserve
         if (! empty($row['item_id']) && $canReserveThisInstitution) {
@@ -80,14 +133,37 @@ $this->headTitle(
         }
 
         $trClass = ($rowNo % 2) == 0 ? 'oddrow' : 'evenrow';
+
+        $attributes = 'class="' . $trClass . '" ';
+
+        if ($uniqueRowId !== false) {
+            $attributes .= 'id="' . $uniqueRowId . '" ';
+        }
+
+        if ($filters !== false) {
+
+            if (isset($row['year'])) {
+                // There is a year of publication available ..
+                $attributes .= 'data-year="' . $row['year'] . '" ';
+
+                // Should we hide this row as it's not selected??
+                if ($firstYearFilter !== $row['year'])
+                    $attributes .= 'hidden="hidden" ';
+
+                // Note that if a row is hidden, then it is waiting to be showed up using any filter ..
+            }
+
+            if (isset($row['volume'])) {
+                $attributes .= 'data-volume="' . $row['volume'] . '" ';
+            }
+        }
+
         ?>
-  <tr data-type="holding" class="<?=$trClass?>"
-			<? if (! empty($row['uniqueRowId'])): ?>
-			id="<?=$row['uniqueRowId']?>" <? endif; ?>>
+  <tr <?=$attributes?> data-type="holding">
 
 			<td>
 				<div class="jt" title="<?=$this->transEsc('Description Status')?>">
-					<span class="availability"><?=empty($row['availability']) ? '' : $this->transEsc('availability_' . $row['availability'])?></span>
+					<span data-type="availability" class="availability"><?=empty($row['availability']) ? '' : $this->transEsc('availability_' . $row['availability'])?></span>
 				</div>
 
 				<div title="<?=$this->transEsc('Item Status')?>"

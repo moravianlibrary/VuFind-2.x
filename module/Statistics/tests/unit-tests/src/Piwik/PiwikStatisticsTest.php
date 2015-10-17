@@ -1,6 +1,6 @@
 <?php
 /**
- * WantIt Interface
+ * PiwikStatistics Tests
  *
  * PHP version 5
  *
@@ -22,20 +22,29 @@
  * @author	Martin Kravec	<kravec@mzk.cz>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  */
-namespace CPK\WantIt;
+namespace StatisticsTest\Piwik;
+
+use Statistics\Piwik\PiwikStatistics;
+use PHPUnit_Framework_TestCase;
 
 /**
- * WantItInterface
- * Provides available actions on records and handles user's requests.
+ * PiwikStatistics Test case
+ * Calls Piwik's API and returns it's data
  * 
  * @author	Martin Kravec	<kravec@mzk.cz>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  */
-interface WantItInterface
+class PiwikStatisticsTest extends PHPUnit_Framework_TestCase
 {
-	/**
-	 * Returns HTML
-	 * @return	string
-	 */
-	public function displayTriggerButton();
+    /**
+     * Test query building
+     *
+     * @return void
+     */
+    public function testBuildQuery()
+    {
+        $a = 5;
+        $b = 5;
+        $this->assertEquals($a, $b);
+    }
 }

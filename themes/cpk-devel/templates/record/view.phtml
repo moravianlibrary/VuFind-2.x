@@ -92,6 +92,12 @@
   <script src="/themes/cpk-devel/js/ajax-record-tabs.js"></script>
   <script>
 
+    /**
+     * Removes active state from Buy Link when there are no buyLinks
+     *
+     * @param {array} buyLinks
+     * @return {void}
+     */
   	function disableBuyTab( buyLinks )
 	{
 		if ( buyLinks.data[0]['buyLinksCount'] === 0 )
@@ -104,9 +110,15 @@
 		var eVersionLinksCount = <?=$this->eVersionLinksCount?>;
 		if ( eVersionLinksCount === 0 ) {
 			$( '#eversion' ).parent().removeClass( 'active' ).addClass( 'disabled' );
-			$( "#e-version-table" ).addClass( 'hidden' );		
+			$( "#e-version-table" ).addClass( 'hidden' );
 		}
-		
+
+		// Disable holdings tab
+		var holdingsCount = <?= count($holdings = $this->driver->getRealTimeHoldings()) ?>;
+		if ( holdingsCount === 0 ) {
+			$( '#holdings' ).parent().removeClass( 'active' ).addClass( 'disabled' );
+		}
+
 		//
 		var recordID = '<?= $this->driver->getUniqueID() ?>';
 		var parentRecordID = '<?= $this->driver->getParentRecordID() ?>';
@@ -127,15 +139,14 @@
 
 	});
   </script>
-  <?php 
-  $related = $this->related();
-  $list = $related->getList($this->driver);
-  foreach ($list as $current) {
-  	echo $related->render($current);
-  }
   
-  
-  ?>
+	<?php
+        $related = $this->related();
+        $list = $related->getList($this->driver);
+        foreach ($list as $current) {
+            echo $related->render($current);
+        }
+    ?>
 
   </div>
 </div>

@@ -82,7 +82,7 @@ class ShibbolethIdentityManager extends Shibboleth
     protected $shibAssertionExportEnabled = false;
 
     /**
-     * It's value must match the separator MultiBackend driver uses to explode() cat_username.
+     * It's value must match the separator MultiBackend driver used to explode() cat_username.
      *
      * @var const SEPARATOR
      */
@@ -119,9 +119,6 @@ class ShibbolethIdentityManager extends Shibboleth
     protected $attribsToCheck = array(
         'cat_username',
         'email',
-        'lastname',
-        'firstname',
-        'fullname',
         'college',
         'major'
     );
@@ -186,8 +183,6 @@ class ShibbolethIdentityManager extends Shibboleth
 
         $attributes = $this->fetchAttributes($config);
 
-        $attributes = $this->parseFullName($attributes);
-
         $eppn = $this->fetchEduPersonPrincipalName();
 
         if (empty($eppn)) {
@@ -197,15 +192,16 @@ class ShibbolethIdentityManager extends Shibboleth
         }
 
         // Get UserRow by checking for known eppn
-        $userRow = $this->userTableGateway->getUserRowByEppn($eppn);
+        $currentUser = $this->userTableGateway->getUserRowByEppn($eppn);
 
         // Now we need to know if there is a request to connect two identities
         $connectIdentities = $userToConnectWith !== null;
         if ($connectIdentities) {
-            $currentUser = $userRow;
 
-            if ($currentUser !== false && $currentUser->id === $userToConnectWith['id'])
-                throw new AuthException("You already have this identity connected.");
+            if ($currentUser !== false &&
+                 $currentUser->id === $userToConnectWith['id'])
+                throw new AuthException(
+                    $this->translate("You already have this identity connected"));
 
             if ($loggedWithKnownEntityId && ! empty($attributes['cat_username'])) {
 
@@ -248,8 +244,8 @@ class ShibbolethIdentityManager extends Shibboleth
                 $this->transferLibraryCards($currentUser, $userToConnectWith);
 
                 // We need to check, if there doesn't exist library card with the same institution to update it
-                $this->updateIdentityCatUsername($userToConnectWith, $prefix,
-                    $attributes['cat_username']);
+                $this->updateIdentity($userToConnectWith,
+                    $attributes['cat_username'], $prefix, $eppn);
 
                 $this->userTableGateway->mergeUserInAllTables($currentUser,
                     $userToConnectWith);
@@ -264,10 +260,10 @@ class ShibbolethIdentityManager extends Shibboleth
         } else { // Being here means there is no other identity to connect with - regular login
 
             // If there was no User found, create one
-            if (! $userRow) {
+            if (! $currentUser) {
 
                 // eppn will be user's username
-                $userRow = $this->userTableGateway->createRowForUsername($eppn);
+                $currentUser = $this->userTableGateway->createRowForUsername($eppn);
 
                 $userRowCreatedRecently = true;
             } else
@@ -279,18 +275,19 @@ class ShibbolethIdentityManager extends Shibboleth
                 $attributes['cat_username'] = $prefix . static::SEPARATOR .
                      $attributes['cat_username'];
 
+                // Did the userRow exist before? ..
                 if (! $userRowCreatedRecently) {
 
-                    $wasDummyBefore = $userRow->home_library === 'Dummy';
+                    $wasDummyBefore = $currentUser->home_library === 'Dummy';
 
                     // We need to check, if there doesn't exist library card with the same institution to update it
                     if (! $wasDummyBefore) {
-                        // We didn't create the user recently so we already know rowId, thus we can update libCards right now
-                        $this->updateIdentityCatUsername($userRow, $prefix,
-                            $attributes['cat_username']);
+                        // We should check, if we have correct cat_username & home_library ...
+                        $this->updateIdentity($currentUser,
+                            $attributes['cat_username'], $prefix, $eppn);
                     } else {
                         // IdP finally returned cat_username for this User .. update proprietary libCard
-                        $userRow->upgradeLibraryCardFromDummy($eppn,
+                        $currentUser->upgradeLibraryCardFromDummy($eppn,
                             $attributes['cat_username'], $prefix);
                     }
                 }
@@ -307,10 +304,11 @@ class ShibbolethIdentityManager extends Shibboleth
             }
 
             if ($userRowCreatedRecently) {
-                $userRow = $this->createUser($userRow, $attributes, $prefix, $eppn);
+                $currentUser = $this->createUser($currentUser, $attributes, $prefix,
+                    $eppn);
             }
 
-            return $userRow;
+            return $currentUser;
         }
     }
 
@@ -435,20 +433,22 @@ class ShibbolethIdentityManager extends Shibboleth
      * @throws AuthException
      * @return UserRow $userRow
      */
-    public function connectIdentity()
+    public function consolidateIdentity()
     {
-        $token = $this->getConsolidatorTokenFromCookie();
+        $token = $this->getConsolidationTokenFromCookie();
 
         if (empty($token))
             throw new AuthException(
-                'No token recieved after logging with another account');
+                $this->translate(
+                    'No token recieved after logging with another account'));
 
         $userToConnectWith = $this->userTableGateway->getUserFromConsolidationToken(
             $token);
 
         if (! $userToConnectWith)
             throw new AuthException(
-                'The consolidation has expired. Please authenticate again.');
+                $this->translate(
+                    'The consolidation has expired. Please authenticate again.'));
 
         return $this->authenticate(null, $userToConnectWith);
     }
@@ -484,16 +484,16 @@ class ShibbolethIdentityManager extends Shibboleth
             // Create redirection URL
         $hostname = $this->config->Site->url;
 
-        if (substr($hostname, - 1) === '/') {
-            $hostname = substr($hostname, 0, - 1);
+        if (substr($hostname, - 1) !== '/') {
+            $hostname .= '/';
         }
 
-        $target = $hostname . '/MyResearch/UserConnect';
+        $target = $hostname . 'MyResearch/UserConnect';
 
         $entityId = $this->fetchCurrentEntityId();
         $target .= '?eid=' . urlencode($entityId);
 
-        $loginRedirect = $this->config->Shibboleth->login . '?target=' .
+        $loginRedirect = $this->config->Shibboleth->login . '?forceAuthn=1&target=' .
              urlencode($target);
 
         if ($this->canLogoutSafely()) {
@@ -741,7 +741,7 @@ class ShibbolethIdentityManager extends Shibboleth
      *
      * @return string Token
      */
-    protected function getConsolidatorTokenFromCookie()
+    protected function getConsolidationTokenFromCookie()
     {
         $token = $_COOKIE[static::CONSOLIDATION_TOKEN_TAG];
         // unset the cookie ...
@@ -756,33 +756,6 @@ class ShibbolethIdentityManager extends Shibboleth
         } else {
             return 'Shib-Assertion-' . $i;
         }
-    }
-
-    /**
-     * Some identity providers provide only fullname in "cn" attribute,
-     * thus it's needed to split it up into firstname & lastname to show
-     * that name properly.
-     *
-     * This method checks if is $attributes['fullname'] set & returns
-     * $attributes with firstname & lastname keys where lastname is
-     * the last word in fullname & others are in firstname.
-     *
-     * @param array $attributes
-     * @return string
-     */
-    protected function parseFullName(array $attributes)
-    {
-        if (isset($attributes['fullname'])) {
-
-            $splittedFullname = preg_split('/\s+/', $attributes['fullname']);
-
-            $attributes['lastname'] = array_pop($splittedFullname);
-            $attributes['firstname'] = implode(' ', $splittedFullname);
-
-            unset($attributes['fullname']);
-        }
-
-        return $attributes;
     }
 
     /**
@@ -817,53 +790,54 @@ class ShibbolethIdentityManager extends Shibboleth
     }
 
     /**
-     * Checks for User's cat_username in his libCards to see, if provided $cat_username
-     * matches the libCard's cat_username unless the prefix of cat_username doesn't match.
+     * Checks for User's libraryCards, whether there is any identity with the same eppn & if it is,
+     * it is then checked if cat_username or home_library has changed, which results in an update .
      *
-     * If the provided $cat_username differs from libCard's cat_username, it is than updated.
      *
      * @param UserRow $user
-     * @param string $prefix
      * @param string $cat_username
+     * @param string $source
+     * @param string $eppn
      *
      * @return void
      */
-    protected function updateIdentityCatUsername(UserRow $user, $prefix,
-        $cat_username)
+    protected function updateIdentity(UserRow $user, $cat_username, $source, $eppn)
     {
-        $resultSet = $user->getLibraryCards();
+        $resultSet = $user->getAllUserLibraryCards();
 
         $libCardToSave = false;
         foreach ($resultSet as $libraryCard) {
-            $libCard_cat_username = $libraryCard->cat_username;
-            $libCard_prefix = explode(static::SEPARATOR, $libCard_cat_username)[0];
 
-            // We are performing the check of corresponding institutions by comparing the prefix
-            // from shibboleth.ini config section name with MultiBackend's source from cat_username
-            if ($libCard_prefix === $prefix) {
-                // now check if the cat_username matches ..
+            // Find the corresponding libraryCard which should be updated ..
+            if ($libraryCard->eppn === $eppn) {
+
+                // Now check if the cat_username has changed ..
                 if ($libCard_cat_username !== $cat_username) {
 
-                    // else update it
+                    // Set new cat_username
                     $libraryCard->cat_username = $cat_username;
 
-                    if (! $libCardToSave) {
-                        $libCardToSave = $libraryCard;
-                    } else {
-                        // There can be more matches due to possibility of having different accounts with identical cat_username
-                        throw new AuthException(
-                            'Cannot update cat_username provided by IdP while you have more identities with identical cat_username. Please disconnect one of these identities and try it again.');
-                    }
+                    $libCardToSave = $libraryCard;
                 }
+
+                // To be sure, also update home_library if neccessary
+                if ($libraryCard->home_library !== $source) {
+                    $libraryCard->home_library = $source;
+
+                    if (! $libCardToSave)
+                        $libCardToSave = $libraryCard;
+                }
+
+                break;
             }
         }
 
-        // It is instanceof UserCard only it there was a cat_username mismatch ..
+        // Perform an SQL query only if the eppn was found within user's cards
         if ($libCardToSave instanceof UserCard) {
             $libCardToSave->save();
 
-            // We need to update user table with the new cat_username
-            $user->activateLibraryCardRow($libCardToSave);
+            // We need to update user table with the new cat_username in case User did have only dummy accounts consolidated
+            $user->activateBestLibraryCard();
         }
     }
 
@@ -882,12 +856,6 @@ class ShibbolethIdentityManager extends Shibboleth
 
         if (! isset($userRow->email))
             $userRow->email = '';
-
-        if (! isset($userRow->firstname))
-            $userRow->firstname = '';
-
-        if (! isset($userRow->lastname))
-            $userRow->lastname = '';
 
             // Save/Update user in database
         $userRow->save();

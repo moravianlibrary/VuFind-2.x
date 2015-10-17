@@ -1,3 +1,24 @@
+<? $comments = $this->driver->getComments(); ?>
+<? if (empty($comments) || count($comments) == 0): ?>
+<? else: ?>
+    <? foreach ($comments as $comment): ?>
+        <div class="comment row">
+            <div class="col-sm-3 name">
+                <strong><?=$this->escapeHtml(trim($comment->firstname . ' ' . $comment->lastname))?></strong><br/>
+                <small>
+                    <?=$this->escapeHtml($comment->created)?>
+                    <? if (($user = $this->auth()->isLoggedIn()) && $comment->user_id == $user->id): ?>
+                        <a href="<?=$this->recordLink()->getActionUrl($this->driver, 'DeleteComment')?>?delete=<?=urlencode($comment->id)?>" id="recordComment<?=$this->escapeHtml($comment->id)?>" class="delete text-danger"><?=$this->transEsc('Delete')?></a>
+                    <? endif; ?>
+                </small>
+            </div>
+            <div class="col-sm-9">
+                <?=$this->escapeHtml($comment->comment)?>
+            </div>
+        </div>
+    <? endforeach; ?>
+<? endif; ?>
+
 <? $comments = $this->driver->getObalkyKnihComments(); ?>
 <? if (empty($comments) || count($comments) == 0): ?>
   <div class="alert alert-info"><?=$this->transEsc('Be the first to leave a comment')?>!</div>
@@ -5,12 +26,18 @@
   <? foreach ($comments as $comment): ?>
     <div class="comment row">
       <div class="col-sm-3 name">
-        <strong><?=$this->escapeHtml(trim($comment->firstname . ' ' . $comment->lastname))?></strong><br/>
+        <strong><?=$this->escapeHtml(trim($comment->library))?></strong><br/>
         <small>
-          <?=$this->escapeHtml($comment->created)?>
-          <? if (($user = $this->auth()->isLoggedIn()) && $comment->user_id == $user->id): ?>
-            <a href="<?=$this->recordLink()->getActionUrl($this->driver, 'DeleteComment')?>?delete=<?=urlencode($comment->id)?>" id="recordComment<?=$this->escapeHtml($comment->id)?>" class="delete text-danger"><?=$this->transEsc('Delete')?></a>
+          <? $parsedDate = strtotime($comment->created); ?>
+          <? if ($parsedDate): ?>
+            <? $date = date('j. n. Y H:i', $parsedDate); ?>
+            <?=$this->escapeHtml($date)?>
+          <? else: ?>
+            <?=$this->escapeHtml($comment->created)?>
           <? endif; ?>
+<!--          --><?// if (($user = $this->auth()->isLoggedIn()) && $comment->user_id == $user->id): ?>
+<!--            <a href="--><?//=$this->recordLink()->getActionUrl($this->driver, 'DeleteComment')?><!--?delete=--><?//=urlencode($comment->id)?><!--" id="recordComment--><?//=$this->escapeHtml($comment->id)?><!--" class="delete text-danger">--><?//=$this->transEsc('Delete')?><!--</a>-->
+<!--          --><?// endif; ?>
         </small>
       </div>
       <div class="col-sm-9">

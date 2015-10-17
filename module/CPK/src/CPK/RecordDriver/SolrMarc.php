@@ -212,7 +212,8 @@ class SolrMarc extends ParentSolrMarc
 
                         // instead of agency_id set bibId so that aleph driver knows what bibId he has to build the query on
 
-                        $bibId = array_pop(explode('.', $id));
+                        $explodedId = explode('.', $id);
+                        $bibId = array_pop($explodedId);
                         $holding['agency_id'] = $bibId;
                     } else {
                         // We actually cannot process Aleph holdings without complete item id ..
@@ -357,36 +358,71 @@ class SolrMarc extends ParentSolrMarc
         return false;
     }
 
+    /**
+     * Returns perent record ID from SOLR
+     * 
+     * @return  string
+     */
     public function getParentRecordID()
     {
         return isset($this->fields['parent_id_str']) ? $this->fields['parent_id_str'] : [];
     }
 
+    /**
+     * Returns link to antikvariaty from SOLR
+     *
+     * @return  string
+     */
     public function getAntikvariatyLink()
     {
         return isset($this->fields['external_links_str_mv'][0]) ? $this->fields['external_links_str_mv'][0] : false;
     }
 
+    /**
+     * Returns links from SOLR indexed from 856
+     *
+     * @return  string
+     */
     public function get856Links()
     {
         return isset($this->fields['url']) ? $this->fields['url'] : false;
     }
 
+    /**
+     * Returns data from SOLR representing links and metadata to access SFX
+     *
+     * @return  array
+     */
     public function get866Data()
     {
-    	return isset($this->fields['sfx_links']) ? $this->fields['sfx_links'] : false;
+    	return isset($this->fields['sfx_links']) ? $this->fields['sfx_links'] : [];
     }
 
+    /**
+     * Returns document range info from field 300
+     *
+     * @return  array
+     */
     public function getRange()
     {
     	return $this->getFieldArray('300');
     }
 
+    /**
+     * Returns document release info from field 250
+     *
+     * @return  array
+     */
     public function getRelease()
     {
     	return $this->getFieldArray('250');
     }
 
+    /**
+     * Returns all ISSNs, ISBNs and ISMNs from SOLR
+     *
+     * @return  string
+     */
     public function getIsn()
     {
     	return isset($this->fields['issnIsbnIsmn_search_str_mv'][0]) ? $this->fields['issnIsbnIsmn_search_str_mv'][0] : false;
@@ -410,12 +446,10 @@ class SolrMarc extends ParentSolrMarc
 
         $response = $client->send();
 
+
         $responseBody = $response->getBody();
 
         $phpResponse = json_decode($responseBody, true);
-
-        if (isset($phpResponse[0]['rating_url']))
-            echo '<p>Hodnocení knihy:</p><img src="' . $phpResponse[0]['rating_url'] . '"/>';
 
         $commentArray = array();
 
@@ -423,15 +457,71 @@ class SolrMarc extends ParentSolrMarc
 
         foreach ($phpResponse[0]['reviews'] as $review) {
             $com = new \stdClass();
-            $com->firstname = $review->library_name;
-            $com->created = $review->created;
-            $com->comment = $review->html_text;
+            $com->library = $review['library_name'];
+            $com->created = $review['created'];
+            $com->comment = $review['html_text'];
 
             $commentArray[$i] = $com;
             $i ++;
         }
 
         return $commentArray;
+    }
+
+    /**
+     * Get bookid on obalkyknih.cz associated with this record.
+     *
+     * @return bookid
+     */
+    public function getObalkyKnihBookId()
+    {
+        $isbnArray = $this->getBibinfoForObalkyKnihV3();
+        $isbnJson = json_encode($isbnArray);
+        $client = new \Zend\Http\Client('http://cache.obalkyknih.cz/api/books');
+        $client->setParameterGet(array(
+            'multi' => '[' . $isbnJson . ']'
+        ));
+        $response = $client->send();
+        $responseBody = $response->getBody();
+        $phpResponse = json_decode($responseBody, true);
+        $bookid = $phpResponse[0]['book_id'];
+        return $bookid;
+    }
+
+
+    /**
+     * Get an array of summary strings for the record.
+     *
+     * @return string
+     */
+    public function getSummaryObalkyKnih()
+    {
+        $isbnArray = $this->getBibinfoForObalkyKnihV3();
+
+        $isbnJson = json_encode($isbnArray);
+
+        $client = new \Zend\Http\Client('http://cache.obalkyknih.cz/api/books');
+        $client->setParameterGet(array(
+            'multi' => '[' . $isbnJson . ']'
+        ));
+
+        $response = $client->send();
+
+        $responseBody = $response->getBody();
+
+        $phpResponse = json_decode($responseBody, true);
+
+        if (isset($phpResponse[0]['annotation'])) {
+
+            if ($phpResponse[0]['annotation']['html'] == null)
+                return null;
+
+            $anot = $phpResponse[0]['annotation']['html'];
+            $source = $phpResponse[0]['annotation']['source'];
+
+            return $anot . " - " . $source;
+        }
+        return null;
     }
 
     /**
@@ -482,5 +572,16 @@ class SolrMarc extends ParentSolrMarc
                 isset($params['mytags']) ? $params['mytags'] : [],
                 isset($params['notes']) ? $params['notes'] : ''
         );
+    }
+
+    /**
+     * Get text that can be displayed to represent this record in
+     * breadcrumbs.
+     *
+     * @return string Breadcrumb text to represent this record.
+     */
+    public function getBreadcrumb()
+    {
+        return $this->getTitle();
     }
 }

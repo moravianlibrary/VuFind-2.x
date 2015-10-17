@@ -35,6 +35,7 @@ namespace CPK\ILS\Driver;
 
 use MZKCommon\ILS\Driver\Aleph as AlephBase;
 use VuFind\ILS\Driver\SolrIdResolver as SolrIdResolverBase;
+use VuFind\ILS\Driver\AlephRestfulException;
 
 class Aleph extends AlephBase
 {
@@ -47,12 +48,17 @@ class Aleph extends AlephBase
 
     protected $maxItemsParsed;
 
+    protected $alephLocale;
+
+    protected $dontShowLink;
+
     public function init()
     {
         parent::init();
 
         if (isset($this->config['Catalog']['available_statuses'])) {
-            $this->available_statuses = explode(self::CONFIG_ARRAY_DELIMITER, $this->config['Catalog']['available_statuses']);
+            $this->available_statuses = explode(self::CONFIG_ARRAY_DELIMITER,
+                $this->config['Catalog']['available_statuses']);
         }
 
         if (isset($this->config['Catalog']['logo'])) {
@@ -60,10 +66,11 @@ class Aleph extends AlephBase
         }
 
         if (isset($this->config['Availability']['maxItemsParsed'])) {
-            $this->maxItemsParsed = intval($this->config['Availability']['maxItemsParsed']);
+            $this->maxItemsParsed = intval(
+                $this->config['Availability']['maxItemsParsed']);
         }
 
-        if (!isset($this->maxItemsParsed) || $this->maxItemsParsed < 2) {
+        if (! isset($this->maxItemsParsed) || $this->maxItemsParsed < 2) {
             $this->maxItemsParsed = 10;
         }
 
@@ -72,12 +79,88 @@ class Aleph extends AlephBase
         }
 
         if ($idResolverType == 'solr') {
-            $this->idResolver = new SolrIdResolver($this->searchService, $this->config);
+            $this->idResolver = new SolrIdResolver($this->searchService,
+                $this->config);
         }
 
         if (isset($this->config['Catalog']['dont_show_link'])) {
-            $this->dontShowLink = explode(self::CONFIG_ARRAY_DELIMITER, $this->config['Catalog']['dont_show_link']);
+            $this->dontShowLink = explode(self::CONFIG_ARRAY_DELIMITER,
+                $this->config['Catalog']['dont_show_link']);
+        } else {
+            $this->dontShowLink = [];
         }
+
+        $this->alephLocale = $this->translator->getTranslator()->getLocale();
+
+        if (isset($this->config['LocaleToLangMapping'])) {
+            if (isset($this->config['LocaleToLangMapping'][$this->alephLocale]))
+                $this->alephLocale = $this->config['LocaleToLangMapping'][$this->alephLocale];
+        }
+    }
+
+    /**
+     * Cancel Holds
+     *
+     * Attempts to Cancel a hold or recall on a particular item. The
+     * data in $cancelDetails['details'] is determined by getCancelHoldDetails().
+     *
+     * @param array $details
+     *            An array of item and patron data
+     *
+     * @return array An array of data on each request including
+     *         whether or not it was successful and a system message (if available)
+     */
+    public function cancelHolds($details)
+    {
+        $patron = $details['patron'];
+        $patronId = $patron['id'];
+        $count = 0;
+        $statuses = array();
+
+        $statuses['fails'] = 0;
+
+        foreach ($details['details'] as $id) {
+
+            try {
+                $result = $this->alephWebService->doRestDLFRequest(
+                    array(
+                        'patron',
+                        $patronId,
+                        'circulationActions',
+                        'requests',
+                        'holds',
+                        $id
+                    ), null, "DELETE");
+            } catch (\Exception $ex) {
+                $statuses[$id] = array(
+                    'success' => false,
+                    'status' => 'cancel_hold_failed',
+                    'sysMessage' => $ex->getMessage()
+                );
+                continue;
+            }
+
+            $reply_code = $result->{'reply-code'};
+            if ($reply_code != "0000") {
+                $message = $result->{'del-pat-hold'}->{'note'};
+                if ($message == null) {
+                    $message = $result->{'reply-text'};
+                }
+                $statuses[$id] = array(
+                    'success' => false,
+                    'status' => 'cancel_hold_failed',
+                    'sysMessage' => (string) $message
+                );
+            } else {
+                $count ++;
+                $statuses[$id] = array(
+                    'success' => true,
+                    'status' => 'cancel_hold_ok'
+                );
+            }
+        }
+        $statuses['count'] = $count;
+        return $statuses;
     }
 
     public function getMyProfile($user)
@@ -90,9 +173,12 @@ class Aleph extends AlephBase
         if (isset($profile['blocks']))
             foreach ($profile['blocks'] as $block) {
                 if (! empty($this->config['Catalog']['agency']))
-                    $translatedBlock = $this->translator->getTranslator()->translate($this->config['Catalog']['agency'] .
-                            " " . "Block" . " " . (string) $block);
-                else $translatedBlock = $this->translator->getTranslator()->translate("Block " . (string) $block);
+                    $translatedBlock = $this->translator->getTranslator()->translate(
+                        $this->config['Catalog']['agency'] . " " . "Block" . " " .
+                             (string) $block);
+                else
+                    $translatedBlock = $this->translator->getTranslator()->translate(
+                        "Block " . (string) $block);
 
                 if (! empty($this->logo)) {
                     $blocks[$this->logo] = $translatedBlock;
@@ -123,11 +209,17 @@ class Aleph extends AlephBase
         $statuses = array();
 
         $idsCount = count($ids);
+
+        $additionalAttributes = [
+            'view' => 'full',
+            'lang' => $this->alephLocale
+        ];
         if ($this->maxItemsParsed === - 1 || $idsCount <= $this->maxItemsParsed) {
             // Query all items at once ..
 
             // Get bibId from this e.g. [ MZK01-000910444:MZK50000910444000270, ... ]
-            $bibId = reset(explode(':', reset($ids)));
+            $explodedBibId = explode(':', reset($ids));
+            $bibId = reset($explodedBibId);
 
             $path_elements = array(
                 'record',
@@ -135,9 +227,8 @@ class Aleph extends AlephBase
                 'items'
             );
 
-            $xml = $this->alephWebService->doRestDLFRequest($path_elements, [
-                'view' => 'full'
-            ]);
+            $xml = $this->alephWebService->doRestDLFRequest($path_elements,
+                $additionalAttributes);
 
             if (! isset($xml->{'items'})) {
                 return $statuses;
@@ -155,15 +246,9 @@ class Aleph extends AlephBase
                 if (array_search($id, $ids) === false)
                     continue;
 
-                list ($status, $dueDate, $holdType, $label) = $this->parseStatusFromItem($item);
+                $alephItem = $this->parseItemFromRawItem($id, $item);
 
-                $statuses[] = array(
-                    'id' => $id,
-                    'status' => $status,
-                    'due_date' => $dueDate,
-                    'hold_type' => $holdType,
-                    'label' => $label
-                );
+                $statuses[] = $alephItem->toAssocArray();
             }
         } else // Query one by one item
             foreach ($ids as $id) {
@@ -176,7 +261,8 @@ class Aleph extends AlephBase
                     $itemId
                 );
 
-                $xml = $this->alephWebService->doRestDLFRequest($path_elements);
+                $xml = $this->alephWebService->doRestDLFRequest($path_elements,
+                    $additionalAttributes);
 
                 if (! isset($xml->{'item'})) {
                     continue;
@@ -184,15 +270,9 @@ class Aleph extends AlephBase
 
                 $item = $xml->{'item'};
 
-                list ($status, $dueDate, $holdType, $label) = $this->parseStatusFromItem($item);
+                $alephItem = $this->parseItemFromRawItem($id, $item);
 
-                $statuses[] = array(
-                    'id' => $id,
-                    'status' => $status,
-                    'due_date' => $dueDate,
-                    'hold_type' => $holdType,
-                    'label' => $label
-                );
+                $statuses[] = $alephItem->toAssocArray();
 
                 // Returns parsed items to show it to user
                 if (count($statuses) === $this->maxItemsParsed)
@@ -208,13 +288,13 @@ class Aleph extends AlephBase
      * Returns an array of status, dueDate (which will often be null) & holdType
      *
      * @param \SimpleXMLElement $item
-     * @return array [ $status, $dueDate, $holdType ]
+     * @return AlephItem $alephItem
      */
-    protected function parseStatusFromItem(\SimpleXMLElement $item)
+    protected function parseItemFromRawItem($id, \SimpleXMLElement $item)
     {
         $status = (string) $item->{'status'};
 
-        $itemStatus = (string) $item->{'z30'}->{'z30-item-status'};
+        $availability = (string) $item->{'z30'}->{'z30-item-status'};
 
         $isDueDate = preg_match('/[0-9]{2}\/.+\/[0-9]{4}/', $status);
 
@@ -233,40 +313,180 @@ class Aleph extends AlephBase
                 $status = 'available';
                 $holdType = 'Place a Hold';
                 $label = 'label-success';
-
             } else {
                 $status = 'unavailable';
             }
 
-            if (in_array($itemStatus, $this->dontShowLink)) {
+            if (in_array($availability, $this->dontShowLink)) {
                 $holdType = 'false';
             }
         }
 
-        return [
-            $status,
-            $dueDate,
-            $holdType,
-            $label
-        ];
+        return (new AlephItem($id))->setLabel($label)
+            ->setAvailability($availability)
+            ->setDueDate($dueDate)
+            ->setHoldType($holdType)
+            ->setStatus($status);
     }
 
-
+    /**
+     * Get profile information using X-server.
+     *
+     * @param array $user
+     *            The patron array
+     *
+     * @throws ILSException
+     * @return array Array of the patron's profile data on success.
+     */
+    public function getMyProfileX($user)
+    {
+        $recordList = array();
+        if (! isset($user['college'])) {
+            $user['college'] = $this->useradm;
+        }
+        $xml = $this->alephWebService->doXRequest("bor-info",
+            array(
+                'loans' => 'N',
+                'cash' => 'N',
+                'hold' => 'N',
+                'library' => $user['college'],
+                'bor_id' => $user['id']
+            ), true);
+        $id = (string) $xml->z303->{'z303-id'};
+        $address1 = (string) $xml->z304->{'z304-address-2'};
+        $address2 = (string) $xml->z304->{'z304-address-3'};
+        $zip = (string) $xml->z304->{'z304-zip'};
+        $phone = (string) $xml->z304->{'z304-telephone'};
+        $barcode = (string) $xml->z304->{'z304-address-0'};
+        $group = (string) $xml->z305->{'z305-bor-status'};
+        $expiry = (string) $xml->z305->{'z305-expiry-date'};
+        $credit_sum = (string) $xml->z305->{'z305-sum'};
+        $credit_sign = (string) $xml->z305->{'z305-credit-debit'};
+        $name = (string) $xml->z303->{'z303-name'};
+        if (strstr($name, ",")) {
+            list ($lastname, $firstname) = explode(",", $name);
+        } else {
+            $lastname = $name;
+            $firstname = "";
+        }
+        if ($credit_sign == null) {
+            $credit_sign = "C";
+        }
+        $recordList['firstname'] = $firstname;
+        $recordList['lastname'] = $lastname;
+        $recordList['cat_username'] = $user['id'];
+        if (isset($user['email'])) {
+            $recordList['email'] = $user['email'];
+        } else {
+            $recordList['email'] = (string) $xml->z304->{'z304-email-address'};
+        }
+        $recordList['address1'] = $address1;
+        $recordList['address2'] = $address2;
+        $recordList['zip'] = $zip;
+        $recordList['phone'] = $phone;
+        $recordList['group'] = $group;
+        $recordList['barcode'] = $barcode;
+        $recordList['expire'] = $this->parseDate($expiry);
+        $recordList['credit'] = $expiry;
+        $recordList['credit_sum'] = $credit_sum;
+        $recordList['credit_sign'] = $credit_sign;
+        $recordList['id'] = $id;
+        // deliquencies
+        $blocks = array();
+        foreach (array(
+            'z303-delinq-1',
+            'z303-delinq-2',
+            'z303-delinq-3'
+        ) as $elementName) {
+            $block = (string) $xml->z303->{$elementName};
+            if (! empty($block) && $block != '00') {
+                $blocks[] = $block;
+            }
+        }
+        foreach (array(
+            'z305-delinq-1',
+            'z305-delinq-2',
+            'z305-delinq-3'
+        ) as $elementName) {
+            $block = (string) $xml->z305->{$elementName};
+            if (! empty($block) && $block != '00') {
+                $blocks[] = $block;
+            }
+        }
+        $recordList['blocks'] = array_unique($blocks);
+        return $recordList;
+    }
 }
 
+class AlephItem
+{
+
+    protected $data = [];
+
+    public function __construct($id = null)
+    {
+        if ($id !== null)
+            return $this->setId($id);
+        else
+            return $this;
+    }
+
+    public function setId($id)
+    {
+        return $this->setProperty('id', $id);
+    }
+
+    public function setStatus($status)
+    {
+        return $this->setProperty('status', $status);
+    }
+
+    public function setDueDate($dueDate)
+    {
+        return $this->setProperty('due_date', $dueDate);
+    }
+
+    public function setHoldType($holdType)
+    {
+        return $this->setProperty('hold_type', $holdType);
+    }
+
+    public function setLabel($label)
+    {
+        return $this->setProperty('label', $label);
+    }
+
+    public function setAvailability($availability)
+    {
+        return $this->setProperty('availability', $availability);
+    }
+
+    protected function setProperty($name, $val)
+    {
+        if ($val !== null)
+            $this->data[$name] = $val;
+
+        return $this;
+    }
+
+    public function toAssocArray()
+    {
+        return $this->data;
+    }
+}
 
 /**
  * SolrIdResolver - resolve bibliographic base against solr.
- *
  */
 class SolrIdResolver extends SolrIdResolverBase
 {
+
     public function resolveIds(&$recordsToResolve)
     {
         $idsToResolve = array();
         foreach ($recordsToResolve as $record) {
             $identifier = $record[$this->itemIdentifier];
-            if (isset($identifier) && !empty($identifier)) {
+            if (isset($identifier) && ! empty($identifier)) {
                 $idsToResolve[] = $record[$this->itemIdentifier];
             }
         }
@@ -275,7 +495,7 @@ class SolrIdResolver extends SolrIdResolverBase
             if (isset($record[$this->itemIdentifier])) {
                 $id = $record[$this->itemIdentifier];
                 if (isset($resolved[$id])) {
-                    $record['id'] = explode(".",$resolved[$id])[1];
+                    $record['id'] = explode(".", $resolved[$id])[1];
                 }
             }
         }

@@ -42,11 +42,11 @@ class AjaxController extends AjaxControllerBase
 {
 
     /**
-     * Get Buy Links
+     * Gets Buy Links
      *
      * @author Martin Kravec <Martin.Kravec@mzk.cz>
      *
-     * @return \Zend\Http\Response
+     * @return array
      */
     protected function getBuyLinksAjax()
     {
@@ -126,15 +126,21 @@ class AjaxController extends AjaxControllerBase
     /**
      * Downloads SFX JIB content for current record.
      *
-     * @param string $institute
+     * @param string $_GET['institute']
      *
      * @return array
      */
-    public function callSfxAjax()
+    public function callLinkServerAjax()
     {
-        $institute = $this->params()->fromQuery('institute');
-        if (! $institute)
-            $institute = 'ANY';
+        $sourceInstitute = $this->params()->fromQuery('sourceInstitute');
+        if (! $sourceInstitute)
+            $sourceInstitute = 'default';
+        
+        $multiBackendConfig = $this->getConfig('MultiBackend');
+        $lsID = 'ls_'.$sourceInstitute;
+        $linkServer = $multiBackendConfig->LinkServers->$lsID;
+        $instituteLsShortcut = explode("|", $linkServer)[0];
+        $instituteLsLink = explode("|", $linkServer)[1];
 
         $recordID = $this->params()->fromQuery('recordID');
         $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
@@ -146,8 +152,6 @@ class AjaxController extends AjaxControllerBase
         if ($isn === false)
             $isn = $recordDriver->getIsn();
 
-        $url = $this->params()->fromQuery('sfxUrl');
-
         $openUrl = $recordDriver->getOpenURL();
         $additionalParams = array();
         parse_str($openUrl, $additionalParams);
@@ -156,15 +160,17 @@ class AjaxController extends AjaxControllerBase
             $additionalParams[str_replace("rft_", "rft.", $key)] = $val;
         }
 
-        $issnPattern = "[0-9][0-9][0-9][0-9][-][0-9][0-9][0-9][X0-9]";
-        if (preg_match($issnPattern, $isn)) {
-            $isnKey = "rft.issn";
-        } else {
-            $isnKey = "rft.isbn";
-        }
+        if (substr($isn, 0, 1) === 'M') {
+            $isnKey = "rft.ismn";
+        } else
+            if ((strlen($isn) === 8) or (strlen($isn) === 9)) {
+                $isnKey = "rft.issn";
+            } else { // (strlen($isn) === 10) OR (strlen($isn) === 13)
+                $isnKey = "rft.isbn";
+            }
 
         $params = array(
-            'sfx.institute' => $institute,
+            'sfx.institute' => $instituteLsShortcut,
             'ctx_ver' => 'Z39.88-2004',
             'ctx_enc' => 'info:ofi/enc:UTF-8',
             'sfx.response_type' => 'simplexml',
@@ -177,7 +183,7 @@ class AjaxController extends AjaxControllerBase
         $electronicChoiceHandler = $wantItFactory->createElectronicChoiceHandlerObject(
             $recordDriver);
 
-        $sfxResult = $electronicChoiceHandler->getRequestDataResponseAsArray($url,
+        $sfxResult = $electronicChoiceHandler->getRequestDataResponseAsArray($instituteLsLink,
             $allParams);
 
         $vars[] = array(
@@ -218,88 +224,6 @@ class AjaxController extends AjaxControllerBase
         return $this->output($vars, self::STATUS_OK);
     }
 
-    /**
-     * Downloads SerialSoulution360link content for current record.
-     *
-     * @param string $institute
-     *
-     * @return array
-     */
-    public function callSerialSoulution360link()
-    {
-        $institute = $this->params()->fromQuery('institute');
-        if (! $institute)
-            $institute = 'ANY';
-
-        $recordID = $this->params()->fromQuery('recordID');
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-        $recordDriver = $recordLoader->load($recordID);
-
-        $url = $this->params()->fromQuery('sfxUrl');
-
-        $additionalParams = array();
-        parse_str($recordDriver->getOpenURL(), $additionalParams);
-
-        $params = array();
-
-        $allParams = array_merge($params, $additionalParams);
-
-        $wantItFactory = $this->getServiceLocator()->get('WantIt\Factory');
-        $electronicChoiceHandler = $wantItFactory->createElectronicChoiceHandlerObject(
-            $recordDriver);
-
-        $ss360linkResult = $electronicChoiceHandler->getRequestDataResponseAsArray(
-            $url, $allParams);
-
-        $vars[] = array(
-            'ss360link' => $ss360linkResult
-        );
-
-        // Done
-        return $this->output($vars, self::STATUS_OK);
-    }
-
-    /**
-     * Downloads EbscoLinksource content for current record.
-     *
-     * @param string $institute
-     *
-     * @return array
-     */
-    public function callEbscoLinksource()
-    {
-        $institute = $this->params()->fromQuery('institute');
-        if (! $institute)
-            $institute = 'ANY';
-
-        $recordID = $this->params()->fromQuery('recordID');
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-        $recordDriver = $recordLoader->load($recordID);
-
-        $url = $this->params()->fromQuery('sfxUrl');
-
-        $additionalParams = array();
-        parse_str($recordDriver->getOpenURL(), $additionalParams);
-
-        $params = array();
-
-        $allParams = array_merge($params, $additionalParams);
-
-        $wantItFactory = $this->getServiceLocator()->get('WantIt\Factory');
-        $electronicChoiceHandler = $wantItFactory->createElectronicChoiceHandlerObject(
-            $recordDriver);
-
-        $ebscoLinksourceResult = $electronicChoiceHandler->getRequestDataResponseAsArray(
-            $url, $allParams);
-
-        $vars[] = array(
-            'ebscoLinksource' => $ebscoLinksourceResult
-        );
-
-        // Done
-        return $this->output($vars, self::STATUS_OK);
-    }
-
     public function getHoldingsStatusesAjax()
     {
         $request = $this->getRequest();
@@ -317,7 +241,16 @@ class AjaxController extends AjaxControllerBase
 
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
 
-            $statuses = $ilsDriver->getStatuses($ids);
+            try {
+                $statuses = $ilsDriver->getStatuses($ids);
+            } catch (\Exception $e) {
+                return $this->output(
+                    [
+                        'status' => $this->getTranslatedUnknownStatus($viewRend),
+                        'message' => $e->getMessage(),
+                        'code' => $e->getCode()
+                    ], self::STATUS_ERROR);
+            }
 
             if (null === $statuses || empty($statuses))
                 return $this->output('$ilsDriver->getStatuses returned nothing',
@@ -351,6 +284,9 @@ class AjaxController extends AjaxControllerBase
 
                 if (! empty($status['label']))
                     $itemsStatuses[$id]['label'] = $status['label'];
+
+                if (! empty($status['availability']))
+                    $itemsStatuses[$id]['availability'] = $status['availability'];
 
                 $key = array_search($id, $ids);
 
@@ -426,7 +362,11 @@ class AjaxController extends AjaxControllerBase
         if ($hasPermissions instanceof \Zend\Http\Response)
             return $hasPermissions;
 
-        $ilsDriver = $this->getILS()->getDriver();
+        $renderer = $this->getViewRenderer();
+
+        $catalog = $this->getILS();
+
+        $ilsDriver = $catalog->getDriver();
 
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
 
@@ -437,7 +377,7 @@ class AjaxController extends AjaxControllerBase
 
             try {
                 // Try to get the profile ..
-                $holds = $ilsDriver->getMyHolds($patron);
+                $holds = $catalog->getMyHolds($patron);
             } catch (\VuFind\Exception\ILS $e) {
 
                 // Something went wrong - include cat_username to properly
@@ -456,7 +396,70 @@ class AjaxController extends AjaxControllerBase
                 return $this->output($data, self::STATUS_ERROR);
             }
 
-            return $this->output($holds, self::STATUS_OK);
+            $recordList = $obalky = [];
+
+            $libraryIdentity = $this->createViewModel();
+
+            // Let's assume there is not avaiable any cancelling
+            $libraryIdentity->cancelForm = false;
+
+            $cancelStatus = $catalog->checkFunction('cancelHolds', compact('patron'));
+
+            foreach ($holds as $hold) {
+                // Add cancel details if appropriate:
+                $hold = $this->holds()->addCancelDetails($catalog, $hold,
+                    $cancelStatus);
+                if ($cancelStatus && $cancelStatus['function'] != "getCancelHoldLink" &&
+                     isset($hold['cancel_details'])) {
+                    // Enable cancel form if necessary:
+                    $libraryIdentity->cancelForm = true;
+                }
+
+                // Build record driver:
+                $resource = $this->getDriverForILSRecord($hold);
+                $recordList[] = $resource;
+
+                $recordId = $resource->getUniqueId();
+                $bibInfo = $renderer->record($resource)->getObalkyKnihJSONV3();
+                if ($bibInfo) {
+                    $recordId = "#cover_$recordId";
+
+                    $bibInfo = json_decode($bibInfo);
+
+                    $recordId = preg_replace("/[\.:]/", "", $recordId);
+
+                    $obalky[$recordId] = [
+                        'bibInfo' => $bibInfo,
+                        'advert' => $renderer->record($resource)->getObalkyKnihAdvert(
+                            'checkedout')
+                    ];
+                }
+            }
+
+            // Get List of PickUp Libraries based on patron's home library
+            try {
+                $libraryIdentity->pickup = $catalog->getPickUpLocations($patron);
+            } catch (\Exception $e) {
+                // Do nothing; if we're unable to load information about pickup
+                // locations, they are not supported and we should ignore them.
+            }
+
+            $libraryIdentity->recordList = $recordList;
+
+            $html = $renderer->render('myresearch/holds-from-identity.phtml',
+                [
+                    'libraryIdentity' => $libraryIdentity,
+                    'AJAX' => true
+                ]);
+
+            $toRet = [
+                'html' => $html,
+                'obalky' => $obalky,
+                'canCancel' => $libraryIdentity->cancelForm,
+                'cat_username' => str_replace('.', '\.', $cat_username)
+            ];
+
+            return $this->output($toRet, self::STATUS_OK);
         } else
             return $this->output(
                 "ILS Driver isn't instanceof MultiBackend - ending job now.",
@@ -488,7 +491,6 @@ class AjaxController extends AjaxControllerBase
 
                 $data['cat_username'] = $cat_username;
                 $data['fines'] = $fines;
-
             } catch (\VuFind\Exception\ILS $e) {
 
                 // Something went wrong - include cat_username to properly
@@ -562,39 +564,23 @@ class AjaxController extends AjaxControllerBase
     }
 
     /**
-     * Filter dates in future
+     * Get a record driver object corresponding to an array returned by an ILS
+     * driver's getMyHolds / getMyTransactions method.
+     *
+     * @param array $current
+     *            Record information
+     *
+     * @return \VuFind\RecordDriver\AbstractBase
      */
-    protected function processFacetValues($fields, $results)
+    protected function getDriverForILSRecord($current)
     {
-        $facets = $results->getFullFieldFacets(array_keys($fields));
-        $retVal = [];
-        $currentYear = date("Y");
-        foreach ($facets as $field => $values) {
-            $newValues = [
-                'data' => []
-            ];
-            foreach ($values['data']['list'] as $current) {
-                // Only retain numeric values!
-                if (preg_match("/^[0-9]+$/", $current['value'])) {
-                    if ($current['value'] < $currentYear) {
-                        $data[$current['value']] = $current['count'];
-                    }
-                }
-            }
-            ksort($data);
-            $newValues = array(
-                'data' => array()
-            );
-            foreach ($data as $key => $value) {
-                $newValues['data'][] = array(
-                    $key,
-                    $value
-                );
-            }
-            $retVal[$field] = $newValues;
-        }
-
-        return $retVal;
+        $id = isset($current['id']) ? $current['id'] : null;
+        $source = isset($current['source']) ? $current['source'] : 'VuFind';
+        $record = $this->getServiceLocator()
+            ->get('VuFind\RecordLoader')
+            ->load($id, $source, true);
+        $record->setExtraDetail('ils_details', $current);
+        return $record;
     }
 
     protected function getTranslatedUnknownStatus($viewRend)
@@ -646,5 +632,41 @@ class AjaxController extends AjaxControllerBase
         }
 
         return true;
+    }
+
+    /**
+     * Filter dates in future
+     */
+    protected function processFacetValues($fields, $results)
+    {
+        $facets = $results->getFullFieldFacets(array_keys($fields));
+        $retVal = [];
+        $currentYear = date("Y");
+        foreach ($facets as $field => $values) {
+            $newValues = [
+                'data' => []
+            ];
+            foreach ($values['data']['list'] as $current) {
+                // Only retain numeric values!
+                if (preg_match("/^[0-9]+$/", $current['value'])) {
+                    if ($current['value'] < $currentYear) {
+                        $data[$current['value']] = $current['count'];
+                    }
+                }
+            }
+            ksort($data);
+            $newValues = array(
+                'data' => array()
+            );
+            foreach ($data as $key => $value) {
+                $newValues['data'][] = array(
+                    $key,
+                    $value
+                );
+            }
+            $retVal[$field] = $newValues;
+        }
+
+        return $retVal;
     }
 }
