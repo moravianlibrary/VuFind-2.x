@@ -18,24 +18,39 @@
         )
       );
     ?>
+    <!-- RTL styling -->
+    <? if ($this->layout()->rtl) {
+      $this->headLink()->appendStylesheet('vendor/bootstrap-rtl.min.css');
+    } ?>
     <?=$this->headLink()?>
     <?=$this->headStyle()?>
     <?
-      // Set global path for Javascript code:
-      $this->headScript()->prependScript("path = '" . rtrim($this->url('home'), '/') . "';");
-
-      // Deal with cart stuff:
       if (!isset($this->renderingError)) {
-        $cart = $this->cart();
+        // Add translation strings
         $this->jsTranslations()->addStrings(
           array(
             'bulk_email_success' => 'bulk_email_success',
+            'bulk_noitems_advice' => 'bulk_noitems_advice',
             'bulk_save_success' => 'bulk_save_success',
             'close' => 'close',
             'loading' => 'Loading',
             'sms_success' => 'sms_success'
           )
         );
+        // Add libphonenumber.js strings
+        $this->jsTranslations()->addStrings(
+          array(
+            "'Phone number invalid'" => 'libphonenumber_invalid',
+            "'Invalid country calling code'" => 'libphonenumber_invalidcountry',
+            "'Invalid region code'" => 'libphonenumber_invalidregion',
+            "'The string supplied did not seem to be a phone number'" => 'libphonenumber_notanumber',
+            "'The string supplied is too long to be a phone number'" => 'libphonenumber_toolong',
+            "'The string supplied is too short to be a phone number'" => 'libphonenumber_tooshort',
+            "'Phone number too short after IDD'" => 'libphonenumber_tooshortidd'
+          )
+        );
+        // Deal with cart stuff:
+        $cart = $this->cart();
         if ($cart->isActive()) {
           $this->headScript()->appendFile("vendor/cookies.js");
           $this->headScript()->appendFile("cart.js");
@@ -45,7 +60,11 @@
           );
           $this->jsTranslations()->addStrings(
             array(
-              'bulk_noitems_advice' => 'bulk_noitems_advice',
+              'addBookBag' => 'Add to Book Bag',
+              'bookbagFull' => 'bookbag_full_msg',
+              'bookbagMax' => $cart->getMaxSize(),
+              'bookbagStatusFull' => 'bookbag_full',
+              'confirmDelete' => 'confirm_delete',
               'confirmEmpty' => 'bookbag_confirm_empty',
               'viewBookBag' => 'View Book Bag',
               'addBookBag' => 'Add to Book Bag',
@@ -58,9 +77,9 @@
             )
           );
         }
-        $this->headScript()->appendScript($this->jsTranslations()->getScript());
-            if ($this->recaptcha()->active()) {
-                $this->headScript()->appendFile("recaptcha_ajax.js");
+        $this->headScript()->appendScript(
+          'var userIsLoggedIn = ' . ($this->auth()->isLoggedIn() ? 'true' : 'false') . ';'
+        );
       }
 
       // Session keep-alive
@@ -68,12 +87,17 @@
           $this->headScript()->appendScript('var keepAliveInterval = '
             . $this->KeepAlive());
           $this->headScript()->appendFile("keep_alive.js");
-      }
     }
     ?>
     <?=$this->headScript()?>
+    <script>
+      var VuFind = new VuFindNamespace(
+        '<?=rtrim($this->url('home'), '/') ?>',
+        <?=$this->jsTranslations()->getJSON() ?>
+      );
+    </script>
   </head>
-  <body>
+  <body class="<?=$this->layoutClass('offcanvas-row')?><? if ($this->layout()->rtl): ?> rtl<? endif; ?>">
     <div id="header" class="clearfix hidden-print">
       <div class="container">
         <?=$this->render('header.phtml')?>
@@ -124,7 +148,7 @@
         <?=$this->layout()->content ?>
       </div>
     </div>
-    <footer role="contentinfo" class="hidden-print">
+    <footer class="hidden-print">
       <div class="container">
         <?=$this->render('footer.phtml')?>
         <?=$this->layout()->poweredBy ?>
@@ -136,7 +160,7 @@
         <div class="modal-content">
           <div class="modal-header">
             <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-            <h4 id="modalTitle" class="modal-title"></h4>
+            <h4 id="modalTitle" class="modal-title">&nbsp;</h4>
           </div>
           <div class="modal-body"><?=$this->transEsc('Loading') ?>...</div>
         </div>

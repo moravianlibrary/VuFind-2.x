@@ -24,9 +24,6 @@
  */
 namespace StatisticsTest\Piwik;
 
-use Statistics\Piwik\PiwikStatistics;
-use PHPUnit_Framework_TestCase;
-
 /**
  * PiwikStatistics Test case
  * Calls Piwik's API and returns it's data
@@ -34,17 +31,19 @@ use PHPUnit_Framework_TestCase;
  * @author	Martin Kravec	<kravec@mzk.cz>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  */
-class PiwikStatisticsTest extends PHPUnit_Framework_TestCase
+class PiwikStatisticsTest extends \PHPUnit_Framework_TestCase
 {
     /**
-     * Test query building
+     * Test the instance
      *
      * @return void
      */
-    public function testBuildQuery()
+    public function testPiwikStatisticsInstance()
     {
-        $a = 5;
-        $b = 5;
-        $this->assertEquals($a, $b);
+        $piwikStatistics = $this->getMockBuilder('Statistics\Piwik\PiwikStatistics')
+        ->disableOriginalConstructor()
+        ->getMock();
+    
+        $this->assertInstanceOf('Statistics\Piwik\PiwikStatistics', $piwikStatistics);
     }
 }

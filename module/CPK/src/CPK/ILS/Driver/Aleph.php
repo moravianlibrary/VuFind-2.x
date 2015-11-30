@@ -44,11 +44,9 @@ class Aleph extends AlephBase
 
     protected $available_statuses = [];
 
-    protected $logo = null;
+    protected $logo= null;
 
     protected $maxItemsParsed;
-
-    protected $alephLocale;
 
     protected $dontShowLink;
 
@@ -74,11 +72,7 @@ class Aleph extends AlephBase
             $this->maxItemsParsed = 10;
         }
 
-        if (isset($this->config['IdResolver']['type'])) {
-            $idResolverType = $this->config['IdResolver']['type'];
-        }
-
-        if ($idResolverType == 'solr') {
+        if ($this->idResolver instanceof \VuFind\ILS\Driver\SolrIdResolver) {
             $this->idResolver = new SolrIdResolver($this->searchService,
                 $this->config);
         }
@@ -88,13 +82,6 @@ class Aleph extends AlephBase
                 $this->config['Catalog']['dont_show_link']);
         } else {
             $this->dontShowLink = [];
-        }
-
-        $this->alephLocale = $this->translator->getTranslator()->getLocale();
-
-        if (isset($this->config['LocaleToLangMapping'])) {
-            if (isset($this->config['LocaleToLangMapping'][$this->alephLocale]))
-                $this->alephLocale = $this->config['LocaleToLangMapping'][$this->alephLocale];
         }
     }
 
@@ -172,16 +159,23 @@ class Aleph extends AlephBase
 
         if (isset($profile['blocks']))
             foreach ($profile['blocks'] as $block) {
-                if (! empty($this->config['Catalog']['agency']))
+                if (isset($this->availabilitySource)) {
                     $translatedBlock = $this->translator->getTranslator()->translate(
-                        $this->config['Catalog']['agency'] . " " . "Block" . " " .
-                             (string) $block);
-                else
+                        $this->availabilitySource . " " . "Block" . " " . (string) $block);
+
+                    /* Skip blocks which are not translated. */
+                    if ($translatedBlock === $this->availabilitySource . " " . "Block" . " " .
+                        (string) $block) continue;
+                }
+                else {
                     $translatedBlock = $this->translator->getTranslator()->translate(
                         "Block " . (string) $block);
+                    if ($translatedBlock === "Block " . (string) $block) continue;
+                }
 
                 if (! empty($this->logo)) {
-                    $blocks[$this->logo] = $translatedBlock;
+                    if (! empty($blocks[$this->logo])) $blocks[$this->logo] .= ", " . $translatedBlock;
+                    else $blocks[$this->logo] = $translatedBlock;
                 } else
                     $blocks[] = $translatedBlock;
             }
@@ -189,6 +183,16 @@ class Aleph extends AlephBase
         $profile['blocks'] = $blocks;
 
         return $profile;
+    }
+
+    public function getMyTransactions($user, $history=false, $limit = 0) {
+        $transactions = parent::getMyTransactions($user, $history, $limit);
+
+        foreach($transactions as &$transaction) {
+            $transaction['loan_id'] = $transaction['item_id'];
+        }
+
+        return $transactions;
     }
 
     /**
@@ -212,7 +216,6 @@ class Aleph extends AlephBase
 
         $additionalAttributes = [
             'view' => 'full',
-            'lang' => $this->alephLocale
         ];
         if ($this->maxItemsParsed === - 1 || $idsCount <= $this->maxItemsParsed) {
             // Query all items at once ..
@@ -296,7 +299,7 @@ class Aleph extends AlephBase
 
         $availability = (string) $item->{'z30'}->{'z30-item-status'};
 
-        $isDueDate = preg_match('/[0-9]{2}\/.+\/[0-9]{4}/', $status);
+        $isDueDate = preg_match('/^[0-9]+\/.+\/[0-9]+/', $status);
 
         $holdType = 'Recall This';
         $label = 'label-danger';

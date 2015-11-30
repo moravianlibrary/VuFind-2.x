@@ -2,6 +2,7 @@
 namespace CPK\RecordDriver;
 
 use MZKCommon\RecordDriver\SolrMarc as ParentSolrMarc;
+use Zend\Http\Client\Adapter\Exception\TimeoutException as TimeoutException;
 
 class SolrMarc extends ParentSolrMarc
 {
@@ -20,6 +21,11 @@ class SolrMarc extends ParentSolrMarc
     {
         list ($source, $localId) = explode('.', $this->getUniqueID());
         return $localId;
+    }
+
+    public function getChildrenIds()
+    {
+        return isset($this->fields['local_ids_str_mv']) ? $this->fields['local_ids_str_mv'] : [];
     }
 
     public function getSourceId()
@@ -114,7 +120,7 @@ class SolrMarc extends ParentSolrMarc
     public function getPublishers()
     {
     	$array = $this->getFieldArray('260', array('b'));
-    	if (count($array) === 0) 
+    	if (count($array) === 0)
     		$array = $this->getFieldArray('264', array('b'));
 
     	return $array;
@@ -154,31 +160,49 @@ class SolrMarc extends ParentSolrMarc
         $mappingsFor996 = $this->getMappingsFor996($source);
 
         // Remember to unset all arrays at that would log an error providing array as another's array key
-        $restrictions = $mappingsFor996['restricted'];
+        if (isset($mappingsFor996['restricted'])) {
+            $restrictions = $mappingsFor996['restricted'];
 
-        if ($restrictions !== null)
             unset($mappingsFor996['restricted']);
+        }
 
-        $ignoredKeyValsPairs = $mappingsFor996['ignoredVals'];
+        if (isset($mappingsFor996['ignoredVals'])) {
+            $ignoredKeyValsPairs = $mappingsFor996['ignoredVals'];
 
-        if ($ignoredKeyValsPairs !== null) {
             unset($mappingsFor996['ignoredVals']);
 
             foreach ($ignoredKeyValsPairs as &$ignoredValue)
                 $ignoredValue = array_map('trim', explode(',', $ignoredValue));
         }
 
+        if (isset($mappingsFor996['toUpper'])) {
+            $toUpper = $mappingsFor996['toUpper'];
+
+            // We will take care of the upperation process in the closest iteration
+            unset($mappingsFor996['toUpper']);
+        } else {
+            // We will iterate over this, so don't let it be null
+            $toUpper = [];
+        }
+
         $toTranslate = [];
 
         // Here particular fields translation configuration takes place (see comments in MultiBackend.ini)
         if (isset($mappingsFor996['translate'])) {
-            $toTranslateArray = array_map('trim', explode(',', $mappingsFor996['translate']));
+
+            $toTranslateArray = $mappingsFor996['translate'];
+
+            unset($mappingsFor996['translate']);
 
             foreach ($toTranslateArray as $toTranslateElement) {
-                list ($fieldToTranslate, $prependString) = explode(':', $toTranslateElement);
+                $toTranslateElements = explode(':', $toTranslateElement);
 
-                if (empty($prependString))
+                $fieldToTranslate = $toTranslateElements[0];
+
+                if (count($toTranslateElements) < 2)
                     $prependString = '';
+                else
+                    $prependString = $toTranslateElements[1];
 
                 $toTranslate[$fieldToTranslate] = $prependString;
             }
@@ -188,16 +212,25 @@ class SolrMarc extends ParentSolrMarc
         $holdings = [];
         foreach ($fields as $currentField) {
             if (! $this->shouldBeRestricted($currentField, $restrictions)) {
+                unset($holding);
+                $holding = array();
 
                 foreach ($mappingsFor996 as $variableName => $current996Mapping) {
+                    // Here it omits unset values & values, which are desired to be ignored by their presence in ignoredVals MultiBackend.ini's array
                     if (! empty($currentField[$current996Mapping]) && ! $this->isIgnored($currentField[$current996Mapping], $current996Mapping, $ignoredKeyValsPairs)) {
                         $holding[$variableName] = $currentField[$current996Mapping];
                     }
                 }
 
+                // Translation takes place from translate
                 foreach ($toTranslate as $fieldToTranslate => $prependString) {
                     if (! empty($holding[$fieldToTranslate]))
                         $holding[$fieldToTranslate] = $this->translate($prependString . $holding[$fieldToTranslate], null, $holding[$fieldToTranslate]);
+                }
+
+                foreach ($toUpper as $fieldToBeUpperred) {
+                    if (! empty($holding[$fieldToBeUpperred]))
+                        $holding[$fieldToBeUpperred] = strtoupper($holding[$fieldToBeUpperred]);
                 }
 
                 $holding['id'] = $id;
@@ -360,7 +393,7 @@ class SolrMarc extends ParentSolrMarc
 
     /**
      * Returns perent record ID from SOLR
-     * 
+     *
      * @return  string
      */
     public function getParentRecordID()
@@ -505,7 +538,12 @@ class SolrMarc extends ParentSolrMarc
             'multi' => '[' . $isbnJson . ']'
         ));
 
-        $response = $client->send();
+        try {
+            $response = $client->send();
+        } catch (TimeoutException $ex) {
+            return null; // TODO what to do when server is not responding
+        }
+
 
         $responseBody = $response->getBody();
 
@@ -583,5 +621,10 @@ class SolrMarc extends ParentSolrMarc
     public function getBreadcrumb()
     {
         return $this->getTitle();
+    }
+
+    public function getRecordType()
+    {
+        return isset($this->fields['recordtype']) ? $this->fields['recordtype'] : '';
     }
 }

@@ -1,4 +1,4 @@
-/*global path*/
+/*global VuFind */
 
 function checkSaveStatuses() {
   var data = $.map($('.result,.record'), function(i) {
@@ -16,7 +16,7 @@ function checkSaveStatuses() {
     }
     $.ajax({
       dataType: 'json',
-      url: path + '/AJAX/JSON?method=getSaveStatuses',
+      url: VuFind.getPath() + '/AJAX/JSON?method=getSaveStatuses',
       data: {id:ids, 'source':srcs},
       success: function(response) {
         if(response.status == 'OK') {
@@ -27,14 +27,14 @@ function checkSaveStatuses() {
             var $icon = $('#result'+result.record_number).find('.fa-star-o');
 
             if ($container.length == 0) { // Record view
-              $container = $('#savedLists');
+              $container = $('.savedLists');
             }
             var $ul = $container.children('ul:first');
             if ($ul.length == 0) {
               $container.append('<ul></ul>');
               $ul = $container.children('ul:first');
             }
-            var html = '<li><a href="' + path + '/MyResearch/MyList/' + result.list_id + '">'
+            var html = '<li><a href="' + VuFind.getPath() + '/MyResearch/MyList/' + result.list_id + '">'
                      + result.list_title + '</a></li>';
             $ul.append(html);
             $link.html("Editovat oblíbené");
@@ -48,6 +48,4 @@ function checkSaveStatuses() {
   }
 }
 
-$(document).ready(function() {
-  checkSaveStatuses();
-});
+$(document).ready(checkSaveStatuses);

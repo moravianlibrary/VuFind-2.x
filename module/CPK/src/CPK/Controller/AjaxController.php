@@ -42,88 +42,6 @@ class AjaxController extends AjaxControllerBase
 {
 
     /**
-     * Gets Buy Links
-     *
-     * @author Martin Kravec <Martin.Kravec@mzk.cz>
-     *
-     * @return array
-     */
-    protected function getBuyLinksAjax()
-    {
-        // Antikvariaty
-        $parentRecordID = $this->params()->fromQuery('parentRecordID');
-        $recordID = $this->params()->fromQuery('recordID');
-
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-
-        $parentRecordDriver = $recordLoader->load($parentRecordID);
-        $recordDriver = $recordLoader->load($recordID);
-
-        $antikvariatyLink = $parentRecordDriver->getAntikvariatyLink();
-
-        // GoogleBooks & Zbozi.cz
-        $wantItFactory = $this->getServiceLocator()->get('WantIt\Factory');
-        $buyChoiceHandler = $wantItFactory->createBuyChoiceHandlerObject(
-            $recordDriver);
-
-        $gBooksLink = $buyChoiceHandler->getGoogleBooksVolumeLink();
-        $zboziLink = $buyChoiceHandler->getZboziLink();
-
-        $buyChoiceLinksCount = 0;
-
-        if ($gBooksLink) {
-            ++ $buyChoiceLinksCount;
-        }
-
-        if ($zboziLink) {
-            ++ $buyChoiceLinksCount;
-        }
-
-        if ($antikvariatyLink) {
-            ++ $buyChoiceLinksCount;
-        }
-
-        $vars[] = array(
-            'gBooksLink' => $gBooksLink ?  : '',
-            'zboziLink' => $zboziLink ?  : '',
-            'antikvariatyLink' => $antikvariatyLink ?  : '',
-            'buyLinksCount' => $buyChoiceLinksCount
-        );
-
-        // Done
-        return $this->output($vars, self::STATUS_OK);
-    }
-
-    /**
-     * Returns subfileds of MARC 996 field for specific recordID
-     *
-     * @param string $_POST['record']
-     * @param string $_POST['field']
-     * @param string $_POST['subfields']
-     *            subfileds
-     *
-     * @return array subfields values
-     */
-    public function getMarc996ArrayAjax()
-    {
-        $recordID = $this->params()->fromQuery('recordID');
-        $field = $this->params()->fromQuery('field');
-        $subfieldsArray = explode(",", $this->params()->fromQuery('subfields'));
-
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-
-        $recordDriver = $recordLoader->load($recordID);
-        $arr = $recordDriver->get996($subfieldsArray);
-
-        $vars[] = array(
-            'arr' => $arr
-        );
-
-        // Done
-        return $this->output($vars, self::STATUS_OK);
-    }
-
-    /**
      * Downloads SFX JIB content for current record.
      *
      * @param string $_GET['institute']
@@ -132,15 +50,7 @@ class AjaxController extends AjaxControllerBase
      */
     public function callLinkServerAjax()
     {
-        $sourceInstitute = $this->params()->fromQuery('sourceInstitute');
-        if (! $sourceInstitute)
-            $sourceInstitute = 'default';
-        
         $multiBackendConfig = $this->getConfig('MultiBackend');
-        $lsID = 'ls_'.$sourceInstitute;
-        $linkServer = $multiBackendConfig->LinkServers->$lsID;
-        $instituteLsShortcut = explode("|", $linkServer)[0];
-        $instituteLsLink = explode("|", $linkServer)[1];
 
         $recordID = $this->params()->fromQuery('recordID');
         $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
@@ -148,6 +58,26 @@ class AjaxController extends AjaxControllerBase
 
         $parentRecordID = $recordDriver->getParentRecordID();
         $parentRecordDriver = $recordLoader->load($parentRecordID);
+
+        $childrenIds = $parentRecordDriver->getChildrenIds();
+
+        $linkServers = [];
+        foreach ($childrenIds as $childrenId) {
+            $sourceInstitute = explode('.', $childrenId)[0];
+
+            $lsID = 'ls_' . $sourceInstitute;
+            $linkServer = $multiBackendConfig->LinkServers->$lsID;
+
+            if ($linkServer === null) // if there is no configuration in Multibackend.ini, use default settings
+                $linkServer = $multiBackendConfig->LinkServers->ls_default;
+
+            $instituteLsShortcut = explode("|", $linkServer)[0];
+            $instituteLsLink = explode("|", $linkServer)[1];
+
+            if (! array_key_exists($instituteLsShortcut, $linkServers))
+            $linkServers[$instituteLsShortcut] = $instituteLsLink;
+        }
+
         $isn = $parentRecordDriver->getIsn();
         if ($isn === false)
             $isn = $recordDriver->getIsn();
@@ -170,7 +100,6 @@ class AjaxController extends AjaxControllerBase
             }
 
         $params = array(
-            'sfx.institute' => $instituteLsShortcut,
             'ctx_ver' => 'Z39.88-2004',
             'ctx_enc' => 'info:ofi/enc:UTF-8',
             'sfx.response_type' => 'simplexml',
@@ -183,8 +112,12 @@ class AjaxController extends AjaxControllerBase
         $electronicChoiceHandler = $wantItFactory->createElectronicChoiceHandlerObject(
             $recordDriver);
 
-        $sfxResult = $electronicChoiceHandler->getRequestDataResponseAsArray($instituteLsLink,
-            $allParams);
+        $sfxResult = [];
+        foreach ($linkServers as $shortcut => $link) {
+            $allParams['sfx.institute'] = $shortcut;
+            $sfxResult[] = $electronicChoiceHandler->getRequestDataResponseAsArray(
+            $link, $allParams);
+        }
 
         $vars[] = array(
             'sfxResult' => $sfxResult
@@ -231,7 +164,8 @@ class AjaxController extends AjaxControllerBase
 
         $viewRend = $this->getViewRenderer();
 
-        if (null === $ids)
+        $ids = array_filter($ids);
+        if (empty($ids))
             return $this->output(
                 [
                     'status' => $this->getTranslatedUnknownStatus($viewRend)
@@ -305,9 +239,109 @@ class AjaxController extends AjaxControllerBase
                 self::STATUS_ERROR);
     }
 
-    public function getMyProfileAjax()
+    /**
+     * Returns subfileds of MARC 996 field for specific recordID
+     *
+     * @param string $_POST['record']
+     * @param string $_POST['field']
+     * @param string $_POST['subfields']
+     *            subfileds
+     *
+     * @return array subfields values
+     */
+    public function getMarc996ArrayAjax()
+    {
+        $recordID = $this->params()->fromQuery('recordID');
+        $field = $this->params()->fromQuery('field');
+        $subfieldsArray = explode(",", $this->params()->fromQuery('subfields'));
+
+        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+
+        $recordDriver = $recordLoader->load($recordID);
+        $arr = $recordDriver->get996($subfieldsArray);
+
+        $vars[] = array(
+            'arr' => $arr
+        );
+
+        // Done
+        return $this->output($vars, self::STATUS_OK);
+    }
+
+    public function getMyBlocksAjax()
     {
         // Get the cat_username being requested
+        $cat_username = $this->params()->fromPost('cat_username');
+
+        $hasPermissions = $this->hasPermissions($cat_username);
+
+        if ($hasPermissions instanceof \Zend\Http\Response)
+            return $hasPermissions;
+
+            $renderer = $this->getViewRenderer();
+
+            // Do we have this feature enabled ??
+            $config = $this->getConfig();
+            $isThisEnabled = $config->Site['notificationsEnabled'] !== null &&
+            $config->Site['notificationsEnabled'];
+
+            if (! $isThisEnabled) {
+                return $this->output(
+                        [
+                            'cat_username' => $cat_username,
+                            'message' => 'Notifications are disabled by the system administrator'
+                        ], self::STATUS_ERROR);
+            }
+
+            $ilsDriver = $this->getILS()->getDriver();
+
+            if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
+
+                $patron = [
+                    'cat_username' => $cat_username,
+                    'id' => $cat_username
+                ];
+
+                try {
+                    // Try to get the profile ..
+                    $profile = $ilsDriver->getMyProfile($patron);
+
+                    $blocks = [];
+
+                    if ($profile['blocks'] !== null) {
+                        $blocks = $profile['blocks'];
+                    }
+
+                    $source = explode('.', $cat_username)[0];
+
+                    $data = [
+                        'source' => $source,
+                        'count' => count($blocks),
+                        'blocks' => $blocks
+                    ];
+
+                    $haveBlocks = is_array($blocks) && count($blocks) > 0;
+                    if (! $haveBlocks) {
+                        $message = $renderer->transEsc( 'no_blocks_found' );
+                        $data['message'] = $message;
+                    }
+
+                } catch (\VuFind\Exception\ILS $e) {
+                    return $this->outputException($e, $cat_username);
+                }
+
+                return $this->output($data, self::STATUS_OK);
+            } else
+                return $this->output(
+                        [
+                            'cat_username' => $cat_username,
+                            'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                        ], self::STATUS_ERROR);
+    }
+
+    public function getMyProfileAjax()
+    {
+            // Get the cat_username being requested
         $cat_username = $this->params()->fromPost('cat_username');
 
         $hasPermissions = $this->hasPermissions($cat_username);
@@ -327,34 +361,34 @@ class AjaxController extends AjaxControllerBase
             try {
                 // Try to get the profile ..
                 $profile = $ilsDriver->getMyProfile($patron);
+
+                if (is_array($profile) && count($profile) === 0) {
+                    return $this->output(
+                        [
+                            'cat_username' => $cat_username,
+                            'message' => $this->translate(
+                                'profile_fetch_problem'),
+                            'consideration' => 'There is a chance you have missing configuration file called "' .
+                                 explode('.', $cat_username)[0] . '.ini"'
+                        ], self::STATUS_ERROR);
+                }
             } catch (\VuFind\Exception\ILS $e) {
-
-                // Something went wrong - include cat_username to properly
-                // attach the error message into the right table
-
-                $debugMsg = ('development' == APPLICATION_ENV) ? ': ' .
-                     $e->getMessage() : '';
-
-                $message = $this->translate('An error has occurred') . $debugMsg;
-
-                $data = [
-                    'message' => $message,
-                    'cat_username' => $cat_username
-                ];
-
-                return $this->output($data, self::STATUS_ERROR);
+                return $this->outputException($e, $cat_username);
             }
 
             return $this->output($profile, self::STATUS_OK);
         } else
             return $this->output(
-                "ILS Driver isn't instanceof MultiBackend - ending job now.",
+                [
+                    'cat_username' => str_replace('.', '\.', $cat_username),
+                    'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                ],
                 self::STATUS_ERROR);
     }
 
     public function getMyHoldsAjax()
     {
-        // Get the cat_username being requested
+            // Get the cat_username being requested
         $cat_username = $this->params()->fromPost('cat_username');
 
         $hasPermissions = $this->hasPermissions($cat_username);
@@ -379,21 +413,7 @@ class AjaxController extends AjaxControllerBase
                 // Try to get the profile ..
                 $holds = $catalog->getMyHolds($patron);
             } catch (\VuFind\Exception\ILS $e) {
-
-                // Something went wrong - include cat_username to properly
-                // attach the error message into the right table
-
-                $debugMsg = ('development' == APPLICATION_ENV) ? ': ' .
-                     $e->getMessage() : '';
-
-                $message = $this->translate('An error has occurred') . $debugMsg;
-
-                $data = [
-                    'message' => $message,
-                    'cat_username' => $cat_username
-                ];
-
-                return $this->output($data, self::STATUS_ERROR);
+               return $this->outputException($e, str_replace('.', '\.', $cat_username));
             }
 
             $recordList = $obalky = [];
@@ -462,7 +482,10 @@ class AjaxController extends AjaxControllerBase
             return $this->output($toRet, self::STATUS_OK);
         } else
             return $this->output(
-                "ILS Driver isn't instanceof MultiBackend - ending job now.",
+                [
+                    'cat_username' => str_replace('.', '\.', $cat_username),
+                    'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                ],
                 self::STATUS_ERROR);
     }
 
@@ -492,27 +515,16 @@ class AjaxController extends AjaxControllerBase
                 $data['cat_username'] = $cat_username;
                 $data['fines'] = $fines;
             } catch (\VuFind\Exception\ILS $e) {
-
-                // Something went wrong - include cat_username to properly
-                // attach the error message into the right table
-
-                $debugMsg = ('development' == APPLICATION_ENV) ? ': ' .
-                     $e->getMessage() : '';
-
-                $message = $this->translate('An error has occurred') . $debugMsg;
-
-                $data = [
-                    'message' => $message,
-                    'cat_username' => $cat_username
-                ];
-
-                return $this->output($data, self::STATUS_ERROR);
+                return $this->outputException($e, $cat_username);
             }
 
             return $this->output($data, self::STATUS_OK);
         } else
             return $this->output(
-                "ILS Driver isn't instanceof MultiBackend - ending job now.",
+                [
+                    'cat_username' => $cat_username,
+                    'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                ],
                 self::STATUS_ERROR);
     }
 
@@ -521,10 +533,13 @@ class AjaxController extends AjaxControllerBase
         // Get the cat_username being requested
         $cat_username = $this->params()->fromPost('cat_username');
 
+
         $hasPermissions = $this->hasPermissions($cat_username);
 
         if ($hasPermissions instanceof \Zend\Http\Response)
             return $hasPermissions;
+
+        $renderer = $this->getViewRenderer();
 
         $ilsDriver = $this->getILS()->getDriver();
 
@@ -537,30 +552,179 @@ class AjaxController extends AjaxControllerBase
 
             try {
                 // Try to get the profile ..
-                $transactions = $ilsDriver->getMyTransactions($patron);
+                $result = $ilsDriver->getMyTransactions($patron);
             } catch (\VuFind\Exception\ILS $e) {
-
-                // Something went wrong - include cat_username to properly
-                // attach the error message into the right table
-
-                $debugMsg = ('development' == APPLICATION_ENV) ? ': ' .
-                     $e->getMessage() : '';
-
-                $message = $this->translate('An error has occurred') . $debugMsg;
-
-                $data = [
-                    'message' => $message,
-                    'cat_username' => $cat_username
-                ];
-
-                return $this->output($data, self::STATUS_ERROR);
+                return $this->outputException($e, $cat_username);
             }
 
-            return $this->output($transactions, self::STATUS_OK);
+            $obalky = $transactions = [];
+
+            $canRenew = $showOverdueMessage = false;
+
+            foreach ($result as $current) {
+
+                $current = $this->renewals()->addRenewDetails($catalog, $current,
+                    $renewStatus);
+
+                if ($canRenew === false && isset($current['renewable']) &&
+                     $current['renewable'] && isset($current['loan_id'])) {
+
+                    $canRenew = true;
+                }
+
+                $resource = $this->getDriverForILSRecord($current);
+
+                // We need to let JS know what to opt for ...
+                $recordId = $resource->getUniqueId();
+                $bibInfo = $renderer->record($resource)->getObalkyKnihJSONV3();
+
+                if ($bibInfo) {
+                    $recordId = "#cover_$recordId";
+
+                    $bibInfo = json_decode($bibInfo);
+
+                    $recordId = preg_replace("/[\.:]/", "", $recordId);
+
+                    $obalky[$recordId] = [
+                        'bibInfo' => $bibInfo,
+                        'advert' => $renderer->record($resource)->getObalkyKnihAdvert(
+                            'checkedout')
+                    ];
+                }
+
+                $ilsDetails = $resource->getExtraDetail('ils_details');
+                if (isset($ilsDetails['dueStatus']) &&
+                     $ilsDetails['dueStatus'] == "overdue") {
+                    $showOverdueMessage = true;
+                }
+
+                $transactions[] = $resource;
+            }
+
+            $html = $renderer->render('myresearch/checkedout-from-identity.phtml',
+                [
+                    'libraryIdentity' => compact('transactions'),
+                    'AJAX' => true
+                ]);
+
+            $toRet = [
+                'html' => $html,
+                'obalky' => $obalky,
+                'canRenew' => $canRenew,
+                'overdue' => $showOverdueMessage,
+                'cat_username' => str_replace('.', '\.', $cat_username)
+            ];
+
+            return $this->output($toRet, self::STATUS_OK);
         } else
             return $this->output(
-                "ILS Driver isn't instanceof MultiBackend - ending job now.",
+                [
+                    'cat_username' => $cat_username,
+                    'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                ],
                 self::STATUS_ERROR);
+    }
+
+    /**
+     * Comment on a record.
+     *
+     * @return \Zend\Http\Response
+     */
+    protected function commentRecordObalkyKnihAjax()
+    {
+        // TODO: user should not be able to add more than one comment
+        $user = $this->getUser();
+        if ($user === false) {
+            return $this->output($this->translate('You must be logged in first'),
+                self::STATUS_NEED_AUTH);
+        }
+
+        $id = $this->params()->fromPost('id');
+        $comment = $this->params()->fromPost('comment');
+        if (empty($id) || empty($comment)) {
+            return $this->output($this->translate('An error has occurred'),
+                self::STATUS_ERROR);
+        }
+
+        $table = $this->getTable('Resource');
+        $resource = $table->findResource($id,
+            $this->params()
+                ->fromPost('source', 'VuFind'));
+        $id = $resource->addComment($comment, $user);
+
+        // obalky
+        $bookid = $this->params()->fromPost('obalkyknihbookid');
+        // //////////////////////////////////////////
+        $client = new \Zend\Http\Client('http://cache.obalkyknih.cz/?add_review=true');
+        $client->setMethod('POST');
+        $client->setParameterGet(
+            array(
+                'book_id' => $bookid,
+                'id' => $id
+            ));
+        $client->setParameterPost(
+            array(
+                'review_text' => $comment
+            ));
+        $response = $client->send();
+        $responseBody = $response->getBody();
+        if ($responseBody == "ok")
+            return $this->output($id, self::STATUS_OK);
+
+        return $this->output($responseBody, self::STATUS_ERROR);
+    }
+
+    /**
+     * Gets Buy Links
+     *
+     * @author Martin Kravec <Martin.Kravec@mzk.cz>
+     *
+     * @return array
+     */
+    protected function getBuyLinksAjax()
+    {
+        // Antikvariaty
+        $parentRecordID = $this->params()->fromQuery('parentRecordID');
+        $recordID = $this->params()->fromQuery('recordID');
+
+        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+
+        $parentRecordDriver = $recordLoader->load($parentRecordID);
+        $recordDriver = $recordLoader->load($recordID);
+
+        $antikvariatyLink = $parentRecordDriver->getAntikvariatyLink();
+
+        // GoogleBooks & Zbozi.cz
+        $wantItFactory = $this->getServiceLocator()->get('WantIt\Factory');
+        $buyChoiceHandler = $wantItFactory->createBuyChoiceHandlerObject(
+            $recordDriver);
+
+        $gBooksLink = $buyChoiceHandler->getGoogleBooksVolumeLink();
+        $zboziLink = $buyChoiceHandler->getZboziLink();
+
+        $buyChoiceLinksCount = 0;
+
+        if ($gBooksLink) {
+            ++ $buyChoiceLinksCount;
+        }
+
+        if ($zboziLink) {
+            ++ $buyChoiceLinksCount;
+        }
+
+        if ($antikvariatyLink) {
+            ++ $buyChoiceLinksCount;
+        }
+
+        $vars[] = array(
+            'gBooksLink' => $gBooksLink ?  : '',
+            'zboziLink' => $zboziLink ?  : '',
+            'antikvariatyLink' => $antikvariatyLink ?  : '',
+            'buyLinksCount' => $buyChoiceLinksCount
+        );
+
+        // Done
+        return $this->output($vars, self::STATUS_OK);
     }
 
     /**
@@ -581,6 +745,26 @@ class AjaxController extends AjaxControllerBase
             ->load($id, $source, true);
         $record->setExtraDetail('ils_details', $current);
         return $record;
+    }
+
+    /**
+     * Get list of comments for a record as HTML.
+     *
+     * @return \Zend\Http\Response
+     */
+    protected function getRecordCommentsObalkyKnihAsHTMLAjax()
+    {
+        $driver = $this->getRecordLoader()->load(
+            $this->params()
+                ->fromQuery('id'),
+            $this->params()
+                ->fromQuery('source', 'VuFind'));
+        $html = $this->getViewRenderer()->render(
+            'record/comments-list-obalkyknih.phtml',
+            [
+                'driver' => $driver
+            ]);
+        return $this->output($html, self::STATUS_OK);
     }
 
     protected function getTranslatedUnknownStatus($viewRend)
@@ -635,6 +819,79 @@ class AjaxController extends AjaxControllerBase
     }
 
     /**
+     * Send output data and exit.
+     *
+     * @param mixed  $data     The response data
+     * @param string $status   Status of the request
+     * @param int    $httpCode A custom HTTP Status Code
+     *
+     * @return \Zend\Http\Response
+     * @throws \Exception
+     */
+    protected function output($data, $status, $httpCode = null)
+    {
+        $response = $this->getResponse();
+        $headers = $response->getHeaders();
+        $headers->addHeaderLine('Cache-Control', 'no-cache, must-revalidate');
+        $headers->addHeaderLine('Expires', 'Mon, 26 Jul 1997 05:00:00 GMT');
+        $headers->addHeaderLine('Access-Control-Allow-Origin', '*');
+        if ($httpCode !== null) {
+            $response->setStatusCode($httpCode);
+        }
+        if ($this->outputMode == 'json') {
+            $headers->addHeaderLine('Content-type', 'application/javascript');
+            $output = ['data' => $data, 'status' => $status];
+            if ('development' == APPLICATION_ENV && count(self::$php_errors) > 0) {
+                $output['php_errors'] = self::$php_errors;
+            }
+            $response->setContent(json_encode($output));
+            return $response;
+        } else if ($this->outputMode == 'plaintext') {
+            $headers->addHeaderLine('Content-type', 'text/plain');
+            $response->setContent($data ? $status . " $data" : $status);
+            return $response;
+        } else {
+            throw new \Exception('Unsupported output mode: ' . $this->outputMode);
+        }
+    }
+
+    /**
+     * This function should be provided with cat_username as many of the AJAX implementations
+     * counts on recieving it in order to properly append it to proprietary element.
+     *
+     * @param \Exception $e
+     * @param string $cat_username
+     * @return \Zend\Http\Response
+     */
+    protected function outputException(\Exception $e, $cat_username = null) {
+
+            // Something went wrong - include cat_username to properly
+            // attach the error message into the right table
+        $debugMsg = ('development' == APPLICATION_ENV) ? ': ' . $e->getMessage() : '';
+
+        $message = $this->translate('An error has occurred') . $debugMsg;
+
+        if ($cat_username == null) {
+            $cat_username = 'unknown';
+            $source = $cat_username;
+        } else {
+            $source = explode('.', $cat_username)[0];
+        }
+
+        $data = [
+            'message' => $message,
+            'cat_username' => $cat_username,
+            'source' => $source
+        ];
+
+        if ($e instanceof VuFind\Exception\ILS) {
+            $data['consideration'] = 'There is a chance you have missing configuration file called "' . explode('.', $cat_username)[0] . '.ini"';
+        }
+
+        return $this->output($data, self::STATUS_ERROR);
+    }
+
+    /**
      * Filter dates in future
      */
     protected function processFacetValues($fields, $results)
@@ -671,70 +928,18 @@ class AjaxController extends AjaxControllerBase
     }
 
     /**
-     * Comment on a record.
+     * Get Autocomplete suggestions.
      *
      * @return \Zend\Http\Response
      */
-    protected function commentRecordObalkyKnihAjax()
+    protected function getACSuggestionsAjax()
     {
-        //TODO: user should not be able to add more than one comment
-        $user = $this->getUser();
-        if ($user === false) {
-            return $this->output(
-                $this->translate('You must be logged in first'),
-                self::STATUS_NEED_AUTH
-            );
-        }
-
-        $id = $this->params()->fromPost('id');
-        $comment = $this->params()->fromPost('comment');
-        if (empty($id) || empty($comment)) {
-            return $this->output(
-                $this->translate('An error has occurred'), self::STATUS_ERROR
-            );
-        }
-
-        $table = $this->getTable('Resource');
-        $resource = $table->findResource(
-            $id, $this->params()->fromPost('source', 'VuFind')
+        $this->writeSession();  // avoid session write timing bug
+        $query = $this->getRequest()->getQuery();
+        $autocompleteManager = $this->getServiceLocator()
+        ->get('CPK\AutocompletePluginManager');
+        return $this->output(
+            $autocompleteManager->getSuggestions($query), self::STATUS_OK
         );
-        $id = $resource->addComment($comment, $user);
-
-
-        //obalky
-        $bookid = $this->params()->fromPost('obalkyknihbookid');
-        ////////////////////////////////////////////
-        $client = new \Zend\Http\Client('http://cache.obalkyknih.cz/?add_review=true');
-        $client->setMethod('POST');
-        $client->setParameterGet(array(
-            'book_id' => $bookid ,
-            'id' => $id,
-        ));
-        $client->setParameterPost(array(
-            'review_text' => $comment,
-        ));
-        $response = $client->send();
-        $responseBody = $response->getBody();
-        if($responseBody == "ok")
-            return $this->output($id, self::STATUS_OK);
-
-        return $this->output($responseBody, self::STATUS_ERROR);
-
-    }
-
-    /**
-     * Get list of comments for a record as HTML.
-     *
-     * @return \Zend\Http\Response
-     */
-    protected function getRecordCommentsObalkyKnihAsHTMLAjax()
-    {
-        $driver = $this->getRecordLoader()->load(
-            $this->params()->fromQuery('id'),
-            $this->params()->fromQuery('source', 'VuFind')
-        );
-        $html = $this->getViewRenderer()
-            ->render('record/comments-list-obalkyknih.phtml', ['driver' => $driver]);
-        return $this->output($html, self::STATUS_OK);
     }
 }

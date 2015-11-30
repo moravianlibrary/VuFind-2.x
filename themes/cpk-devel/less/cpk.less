@@ -4,7 +4,6 @@
 @import "parts/_bootstrap-material-design-colors";
 
 //import variables definitions
-@import "parts/_bootstrap-material-design-variables";
 @import "variables";
 
 @import "parts/alerts";
@@ -13,10 +12,19 @@
 @import "parts/header-searchbox";
 @import "parts/footer";
 @import "parts/search-results";
+@import "parts/cpk-icons";
 
 @import "parts/responsive-table";
 
 @import "statistics";
+
+@brand-unknown: #9E9E9E;
+
+@label-unknown-bg: @brand-unknown;
+
+.label-unknown {
+  .label-variant(@label-unknown-bg);
+}
 
 header{
   margin-bottom: 20px;
@@ -26,14 +34,96 @@ a {
   cursor: pointer;
 }
 
-//to refactor
-.search-controls {
-  margin-bottom: 10px;
-  margin-left: -30px;
-  margin-right: -30px;
+#notificationsList {
+  padding-bottom: 0;
+  width:400px;
 }
 
-//to refactor
+.notification-institution {
+  margin: 5px 15px 0 15px;
+}
+
+.notif-default, .notif-info, .notif-danger, .notif-warning, .notif-success, .notif-header{
+  border-bottom: 1px solid;
+  border-bottom-color: lightgrey;
+  min-height: 30px;
+}
+
+.notif-header{
+  font-weight: bold;
+  margin-top: 10px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.notif-default, .notif-info, .notif-danger, .notif-warning, .notif-success {
+  padding-left: 7px;
+  cursor: pointer;
+  padding-top: 3px;
+}
+
+.notif-default:hover, .notif-info:hover, .notif-danger:hover, .notif-warning:hover, .notif-success:hover {
+  background-color: #e3e3e3;
+}
+
+.notif-default:before, .notif-info:before, .notif-danger:before, .notif-warning:before, .notif-success:before {
+  display: inline-block;
+  font: normal normal normal 14px/1 FontAwesome;
+  font-size: inherit;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding-right: 5px;
+}
+
+.notif-default:before {
+  content: "\f111";
+}
+.notif-default {
+
+}
+
+.notif-info:before {
+  content: "\f05a";
+}
+.notif-info {
+
+}
+
+.notif-danger:before {
+  content: "\f071";
+}
+.notif-danger {
+
+}
+
+.notif-warning:before {
+  content: "\f071";
+}
+.notif-warning {
+
+ }
+
+.notif-success:before {
+  content: "\f00c";
+}
+.notif-success {
+
+}
+
+.notificationWarning {
+    position: absolute;
+    right: 15px;
+    top: 9px;
+    color: red;
+}
+
+//search controls margin bottom
+.search-controls {
+  margin-bottom: 10px;
+}
+
+//search controls on one line
 .search-controls .text-right {
   margin-top:-6px;
 }
@@ -78,4 +168,15 @@ a {
 .record-export li a {
 	padding-left: 10px !important;
 	padding-right: 10px !important;
+}
+
+.autocomplete-results .autocomplete-results-category {
+    background-color: #333;
+    color: #eee;
+    font-weight: bold;
+    padding: 2px 0px 2px 8px;
+}
+.autocomplete-results .item {
+    padding-top: 4px;
+    padding-bottom: 4px;
 }

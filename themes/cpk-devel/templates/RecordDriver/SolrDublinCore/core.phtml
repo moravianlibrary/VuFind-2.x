@@ -7,7 +7,6 @@
 <? if ($bibinfo = $this->record($this->driver)->getObalkyKnihJSONV3()): ?>
 
 <? endif; ?>
-<?= $this->render('RecordDriver/SolrDefault/records-in-groups.phtml'); ?>
 
 <div class="well">
 <div class="row" vocab="http://schema.org/" resource="#record" typeof="<?=$this->driver->getSchemaOrgFormats()?> Product">
@@ -256,7 +255,7 @@
         <td>
           <? foreach ($subjects as $field): ?>
           <? $subject = $field ?>
-          <? $subfield = $field ?>
+          <? $subfield = str_replace("--", " -> ", $field); ?>
           <div class="subjectLine" property="keywords">
             <a class="backlink" title="<?=$this->escapeHtmlAttr($field)?>" href="<?=$this->record($this->driver)->getLink('subject', $subject)?>"><?=trim($this->escapeHtml($subfield))?></a>
           </div>
@@ -516,6 +515,17 @@
       </td>
     </tr>
   <? endif; ?>
+  
+  		<? if ($this->citation): ?>
+            <tr>
+              <th><?=$this->transEsc('Citation')?>: </th>
+              <td>
+                <iframe src="https://www.citacepro.com/api/cpk/citace/<?=$this->driver->getUniqueID()?>"
+                		frameborder="0" width="100%" height="90">
+                </iframe>
+              </td>
+            </tr>
+          <? endif; ?>
 
       <? $recordLinks = $this->driver->getAllRecordLinks(); ?>
       <? if(!empty($recordLinks)): ?>

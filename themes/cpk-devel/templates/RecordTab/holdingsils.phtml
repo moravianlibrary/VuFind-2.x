@@ -136,18 +136,23 @@ $this->headTitle(
 
         $attributes = 'class="' . $trClass . '" ';
 
+        $itemStatusLabel = 'label-primary';
+
         if ($uniqueRowId !== false) {
             $attributes .= 'id="' . $uniqueRowId . '" ';
         }
+        else {
+            $itemStatusLabel = false;
+        }
 
-        if ($filters !== false) {
+        if ((! empty($filters)) && ($filters !== false)) {
 
             if (isset($row['year'])) {
                 // There is a year of publication available ..
                 $attributes .= 'data-year="' . $row['year'] . '" ';
 
                 // Should we hide this row as it's not selected??
-                if ($firstYearFilter !== $row['year'])
+                if ((! empty($firstYearFilter)) && ($firstYearFilter !== $row['year']))
                     $attributes .= 'hidden="hidden" ';
 
                 // Note that if a row is hidden, then it is waiting to be showed up using any filter ..
@@ -161,15 +166,19 @@ $this->headTitle(
         ?>
   <tr <?=$attributes?> data-type="holding">
 
-			<td>
+			<td data-title="<?=$this->transEsc("Status")?>">
 				<div class="jt" title="<?=$this->transEsc('Description Status')?>">
 					<span data-type="availability" class="availability"><?=empty($row['availability']) ? '' : $this->transEsc('availability_' . $row['availability'])?></span>
 				</div>
 
 				<div title="<?=$this->transEsc('Item Status')?>"
 					data-type="item-status">
-					<i class="fa fa-spinner fa-spin"></i> <span
-						class="label label-primary"><?=$this->transEsc('Loading')?> ...</span>
+					<? if (! $itemStatusLabel): ?>
+					   <span class="label label-unknown"><?=$this->transEsc('unknown status')?></span>
+					<? else: ?>
+					   <i class="fa fa-spinner fa-spin"></i>
+					   <span class="label <?=$itemStatusLabel?>"><?=$this->transEsc('Loading')?> ...</span>
+					<? endif; ?>
 				</div>
 
       <? if (!empty($row['link']) && $row['link']): ?>
@@ -181,7 +190,7 @@ $this->headTitle(
       <? endif; ?>
 
     </td>
-			<td data-title="<?=$this->transEsc("Due Date")?>">
+			<td data-title="<?=$this->transEsc("Due Date")?>" data-type="due_date">
       <?if (!empty($row['duedate']) && $row['duedate']) : ?>
         <?=$this->transEsc($row['duedate'])?>
       <? elseif (!empty($row['duedate_status']) && $row['duedate_status'] != $row['status']):?>

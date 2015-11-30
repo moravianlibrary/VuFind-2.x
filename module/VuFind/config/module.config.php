@@ -129,6 +129,7 @@ $config = [
     'service_manager' => [
         'allow_override' => true,
         'factories' => [
+            'VuFind\AccountCapabilities' => 'VuFind\Service\Factory::getAccountCapabilities',
             'VuFind\AuthManager' => 'VuFind\Auth\Factory::getManager',
             'VuFind\AuthPluginManager' => 'VuFind\Service\Factory::getAuthPluginManager',
             'VuFind\AutocompletePluginManager' => 'VuFind\Service\Factory::getAutocompletePluginManager',
@@ -160,6 +161,7 @@ $config = [
             'VuFind\ILSTitleHoldLogic' => 'VuFind\Service\Factory::getILSTitleHoldLogic',
             'VuFind\Logger' => 'VuFind\Service\Factory::getLogger',
             'VuFind\Mailer' => 'VuFind\Mailer\Factory',
+            'VuFind\ProxyConfig' => 'VuFind\Service\Factory::getProxyConfig',
             'VuFind\Recaptcha' => 'VuFind\Service\Factory::getRecaptcha',
             'VuFind\RecommendPluginManager' => 'VuFind\Service\Factory::getRecommendPluginManager',
             'VuFind\RecordDriverPluginManager' => 'VuFind\Service\Factory::getRecordDriverPluginManager',
@@ -187,10 +189,11 @@ $config = [
             'VuFind\WorldCatUtils' => 'VuFind\Service\Factory::getWorldCatUtils',
         ],
         'invokables' => [
+            'VuFind\HierarchicalFacetHelper' => 'VuFind\Search\Solr\HierarchicalFacetHelper',
+            'VuFind\IpAddressUtils' => 'VuFind\Net\IpAddressUtils',
             'VuFind\Search'         => 'VuFindSearch\Service',
             'VuFind\SessionManager' => 'Zend\Session\SessionManager',
             'VuFind\Search\Memory'  => 'VuFind\Search\Memory',
-            'VuFind\HierarchicalFacetHelper' => 'VuFind\Search\Solr\HierarchicalFacetHelper'
         ],
         'initializers' => [
             'VuFind\ServiceManager\Initializer::initInstance',
@@ -377,6 +380,7 @@ $config = [
                 'abstract_factories' => ['VuFind\ILS\Driver\PluginFactory'],
                 'factories' => [
                     'aleph' => 'VuFind\ILS\Driver\Factory::getAleph',
+                    'daia' => 'VuFind\ILS\Driver\Factory::getDAIA',
                     'demo' => 'VuFind\ILS\Driver\Factory::getDemo',
                     'horizon' => 'VuFind\ILS\Driver\Factory::getHorizon',
                     'horizonxmlapi' => 'VuFind\ILS\Driver\Factory::getHorizonXMLAPI',
@@ -389,13 +393,11 @@ $config = [
                 'invokables' => [
                     'amicus' => 'VuFind\ILS\Driver\Amicus',
                     'claviussql' => 'VuFind\ILS\Driver\ClaviusSQL',
-                    'daia' => 'VuFind\ILS\Driver\DAIA',
                     'evergreen' => 'VuFind\ILS\Driver\Evergreen',
                     'innovative' => 'VuFind\ILS\Driver\Innovative',
                     'koha' => 'VuFind\ILS\Driver\Koha',
                     'lbs4' => 'VuFind\ILS\Driver\LBS4',
                     'newgenlib' => 'VuFind\ILS\Driver\NewGenLib',
-                    'pica' => 'VuFind\ILS\Driver\PICA',
                     'polaris' => 'VuFind\ILS\Driver\Polaris',
                     'sample' => 'VuFind\ILS\Driver\Sample',
                     'sierra' => 'VuFind\ILS\Driver\Sierra',
@@ -437,6 +439,7 @@ $config = [
                     'alphabrowselink' => 'VuFind\Recommend\AlphaBrowseLink',
                     'europeanaresultsdeferred' => 'VuFind\Recommend\EuropeanaResultsDeferred',
                     'facetcloud' => 'VuFind\Recommend\FacetCloud',
+                    'libraryh3lp' => 'VuFind\Recommend\Libraryh3lp',
                     'openlibrarysubjects' => 'VuFind\Recommend\OpenLibrarySubjects',
                     'openlibrarysubjectsdeferred' => 'VuFind\Recommend\OpenLibrarySubjectsDeferred',
                     'pubdatevisajax' => 'VuFind\Recommend\PubDateVisAjax',
@@ -745,7 +748,7 @@ $staticRoutes = [
     'Error/Unavailable', 'Feedback/Email', 'Feedback/Home', 'Help/Home',
     'Install/Done', 'Install/FixBasicConfig', 'Install/FixCache',
     'Install/FixDatabase', 'Install/FixDependencies', 'Install/FixILS',
-    'Install/FixSecurity', 'Install/FixSolr', 'Install/Home',
+    'Install/FixSecurity', 'Install/FixSolr', 'Install/FixSSLCerts', 'Install/Home',
     'Install/PerformSecurityFix', 'Install/ShowSQL',
     'LibGuides/Home', 'LibGuides/Results',
     'LibraryCards/Home', 'LibraryCards/SelectCard',

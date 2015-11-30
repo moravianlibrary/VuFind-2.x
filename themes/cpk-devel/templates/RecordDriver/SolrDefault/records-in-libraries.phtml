@@ -4,6 +4,43 @@
 <?php
 
 	$count = count($records);
+	
+	// put caslin at the end and cnb before caslin, when available
+	// but keep at the front when is set in facet params
+	$filters = $params->getFilters();
+	
+	$caslinFoundInFilters = 0;
+	$cnbFoundInFilters = 0;
+	if (isset($filters['~institution'])) {
+    	$institutionsInFilters = $filters['~institution'];
+    	
+    	foreach($institutionsInFilters as $institution) {
+    	    if (strpos($institution,'CASLIN') !== false) {
+    	        $caslinFoundInFilters++;
+    	    }
+    	    if (strpos($institution,'CNB') !== false) {
+    	        $cnbFoundInFilters++;
+    	    }
+    	}
+
+	}
+	 
+	if ($cnbFoundInFilters == 0) {
+	    if (isset($records['cnb'])) {
+	        $cnb = $records['cnb'];
+	        unset($records['cnb']);
+	        $records['cnb'] = $cnb;
+	    }
+	}
+	
+	if ($caslinFoundInFilters == 0) {
+	    if (isset($records['caslin'])) {
+	        $caslin = $records['caslin'];
+	        unset($records['caslin']);
+	        $records['caslin'] = $caslin;
+	    }
+	}
+	
 	if ($count <= 2) {
 		$maxInstitutionsShown = 2;
 	} else if ($count === 3) {
@@ -18,8 +55,7 @@
 		$recordUrl = $this->recordLink()->getUrl($record);
 		$anchor = $this->transEsc('source_' . $source, null, $source);
 
-		$logoKey = isset($this->config['IdPLogosMappedToSolr'][$source]) ? $this->config['IdPLogosMappedToSolr'][$source] : '';
-		$logoUrl = isset($this->config['IdPLogos'][$logoKey]) ? $this->config['IdPLogos'][$logoKey] : '' ?>
+		$logoUrl = isset($this->config['IdPLogos'][$source]) ? $this->config['IdPLogos'][$source] : '' ?>
 
 <a href="<?=$recordUrl?>" title="<?=$this->translate('Record in institution') . ' ' . $anchor ?>" <?=(++$i > $maxInstitutionsShown) ? 'hidden="hidden"' : '' ?>>
     <div class="row root-title">
@@ -43,3 +79,5 @@
 <? endif; ?>
 
 </div>
+
+<? $this->headScript()->appendFile("search-results.js"); ?>

@@ -688,10 +688,11 @@ class AlephWebServices {
         $url = $this->appendQueryString($url, $params);
         if ($auth) {
             $url = $this->appendQueryString(
-                $url, array(
+                $url,
+                [
                     'user_name' => $this->wwwuser,
                     'user_password' => $this->wwwpasswd
-                )
+                ]
             );
         }
         $result = $this->doHTTPRequest($url);
@@ -2580,14 +2581,6 @@ class Aleph extends AbstractBase implements \Zend\Log\LoggerAwareInterface,
             $varfield->addAttribute('i2', ' ');
             $subfield = $varfield->addChild('subfield', htmlspecialchars($source));
             $subfield->addAttribute('label', 'a');
-        }
-        if (!empty($publisher)) {
-            $varfield = $document->{'record'}->{'metadata'}->{'oai_marc'}->addChild('varfield');
-            $varfield->addAttribute('id', '260');
-            $varfield->addAttribute('i1', ' ');
-            $varfield->addAttribute('i2', ' ');
-            $subfield = $varfield->addChild('subfield', htmlspecialchars($source));
-            $subfield->addAttribute('label', 'b');
         }
         $updateDocParams = array('library' => $base, 'doc_num' => $docNum);
         $updateDocParams['xml_full_req'] = $document->asXml();

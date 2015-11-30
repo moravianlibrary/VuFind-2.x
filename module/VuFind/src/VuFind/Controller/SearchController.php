@@ -57,16 +57,19 @@ class SearchController extends AbstractSearch
 
         $prefferedFacets = array();
         $config = $this->getServiceLocator()->get('VuFind\Config')->get('facets');
-        foreach ($config->PreferredFacets as $field => $values) {
-            $vals = array();
-            $i = 0;
-            foreach ($values as $val) {
-                $i++;
-                $vals[$val] = $i;
+        
+        if (count($config->PreferredFacets)) {
+            foreach ($config->PreferredFacets as $field => $values) {
+                $vals = array();
+                $i = 0;
+                foreach ($values as $val) {
+                    $i++;
+                    $vals[$val] = $i;
+                }
+                $prefferedFacets[$field] = $vals;
             }
-            $prefferedFacets[$field] = $vals;
         }
-
+        
         $view->preferredFacets = $prefferedFacets;
 
         $specialFacets = $this->parseSpecialFacetsSetting(
@@ -103,7 +106,8 @@ class SearchController extends AbstractSearch
         $view->useRecaptcha = $this->recaptcha()->active('email');
         $view->url = $this->params()->fromPost(
             'url', $this->params()->fromQuery(
-                'url', $this->getRequest()->getServer()->get('HTTP_REFERER')
+                'url',
+                $this->getRequest()->getServer()->get('HTTP_REFERER')
             )
         );
 
@@ -138,12 +142,10 @@ class SearchController extends AbstractSearch
                     $view->to, $view->from, $view->message,
                     $view->url, $this->getViewRenderer(), $view->subject, $cc
                 );
-                $this->flashMessenger()->setNamespace('info')
-                    ->addMessage('email_success');
+                $this->flashMessenger()->addMessage('email_success', 'success');
                 return $this->redirect()->toUrl($view->url);
             } catch (MailException $e) {
-                $this->flashMessenger()->setNamespace('error')
-                    ->addMessage($e->getMessage());
+                $this->flashMessenger()->addMessage($e->getMessage(), 'error');
             }
         }
         return $view;
@@ -430,17 +432,17 @@ class SearchController extends AbstractSearch
      */
     public function reservessearchAction()
     {
-        $results = $this->getResultsManager()->get('SolrReserves');
-        $params = $results->getParams();
-        $params->initFromRequest(
-            new \Zend\Stdlib\Parameters(
-                $this->getRequest()->getQuery()->toArray()
-                + $this->getRequest()->getPost()->toArray()
-            )
+        $request = new \Zend\Stdlib\Parameters(
+            $this->getRequest()->getQuery()->toArray()
+            + $this->getRequest()->getPost()->toArray()
         );
-        return $this->createViewModel(
-            ['params' => $params, 'results' => $results]
+        $view = $this->createViewModel();
+        $runner = $this->getServiceLocator()->get('VuFind\SearchRunner');
+        $view->results = $runner->run(
+            $request, 'SolrReserves', $this->getSearchSetupCallback()
         );
+        $view->params = $view->results->getParams();
+        return $view;
     }
 
     /**
@@ -467,8 +469,7 @@ class SearchController extends AbstractSearch
             ->getQueryIDLimit();
         if (count($bibIDs) > $limit) {
             $bibIDs = array_slice($bibIDs, 0, $limit);
-            $this->flashMessenger()->setNamespace('info')
-                ->addMessage('too_many_reserves');
+            $this->flashMessenger()->addMessage('too_many_reserves', 'info');
         }
 
         // Use standard search action with override parameter to show results:

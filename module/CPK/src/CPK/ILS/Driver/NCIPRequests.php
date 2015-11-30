@@ -12,9 +12,39 @@
  */
 namespace CPK\ILS\Driver;
 
-class NCIPRequests extends OldNCIPRequests {
+class NCIPRequests {
 
     protected $noScheme = false;
+    protected $sigla = '';
+
+    public function __construct($agency) {
+        $this->sigla = $agency;
+    }
+
+    public function patronLogin($username, $password) {
+        $body =
+        "<ns1:LookupUser>" .
+        $this->insertInitiationHeader() . // TODO add agency
+        "<ns1:AuthenticationInput>" .
+        "<ns1:AuthenticationInputData>" . htmlspecialchars($username) . "</ns1:AuthenticationInputData>" .
+        "<ns1:AuthenticationDataFormatType>text/plain</ns1:AuthenticationDataFormatType>" .
+        "<ns1:AuthenticationInputType>" . $this->userAuthenticationInputType() . "</ns1:AuthenticationInputType>" .
+        "</ns1:AuthenticationInput>" .
+        "<ns1:AuthenticationInput>" .
+        "<ns1:AuthenticationInputData>" . htmlspecialchars($password) . "</ns1:AuthenticationInputData>" .
+        "<ns1:AuthenticationDataFormatType>text/plain</ns1:AuthenticationDataFormatType>" .
+        "<ns1:AuthenticationInputType>Password</ns1:AuthenticationInputType>" .
+        "</ns1:AuthenticationInput>" .
+        $this->insertUserElementType("Name Information") .
+        $this->insertUserElementType("User Address Information") .
+        "</ns1:LookupUser>";
+        return $this->header() . $body . $this->footer();
+    }
+
+    public function patronFullInformation($patron) {
+        $extras = $this->allUserElementType();
+        return $this->patronInformation($patron, $extras);
+    }
 
     public function patronLoanedItems($patron) {
         $extras = "<ns1:LoanedItemsDesired />";
@@ -31,11 +61,16 @@ class NCIPRequests extends OldNCIPRequests {
         return $this->patronInformation($patron, $extras);
     }
 
-    public function lookupItem($itemId, $patron) {
+    public function patronBlocks($patron) {
+        $extras = $this->insertUserElementType("Block Or Trap");
+        return $this->patronInformation($patron, $extras);
+    }
+
+    public function lookupItem($itemId, $agency) {
         $body =
         "<ns1:LookupItem>" .
-        $this->insertInitiationHeader($patron['agency']) .
-        $this->insertItemIdTag($itemId, $patron) .
+        $this->insertInitiationHeader($agency) .
+        $this->insertItemIdTag($itemId, $agency) .
         $this->allItemElementType() .
         "</ns1:LookupItem>";
         return $this->header() . $body . $this->footer();
@@ -49,7 +84,7 @@ class NCIPRequests extends OldNCIPRequests {
         "<ns1:RequestItem>" .
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
-        $this->insertItemIdTag($holdDetails['item_id'], $patron) .
+        $this->insertItemIdTag($holdDetails['item_id'], $patron['agency']) .
         $this->insertRequestType("Hold") .
         $this->insertRequestScopeType($requestScopeType);
         if (! empty($holdDetails['pickUpLocation'])) $body .= "<ns1:PickupLocation>" . htmlspecialchars($holdDetails['pickUpLocation']) . "</ns1:PickupLocation>";
@@ -62,7 +97,7 @@ class NCIPRequests extends OldNCIPRequests {
         "<ns1:CancelRequestItem>" .
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
-        $this->insertItemIdTag($itemId, $patron) .
+        $this->insertItemIdTag($itemId, $patron['agency']) .
         $this->insertRequestType("Estimate") .
         $this->insertRequestScopeType("Item") .
         "</ns1:CancelRequestItem>";
@@ -86,10 +121,52 @@ class NCIPRequests extends OldNCIPRequests {
         "<ns1:RenewItem>" .
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
-        $this->insertItemIdTag($itemId, $patron) .
+        $this->insertItemIdTag($itemId, $patron['agency']) .
         $this->allItemElementType() .
         $this->allUserElementType() .
         "</ns1:RenewItem>";
+        return $this->header() . $body . $this->footer();
+    }
+
+    public function LUISItemId($itemList, $nextItemToken = null, XCNCIP2 $mainClass = null) {
+        $body = "<ns1:LookupItemSet>";
+        foreach ($itemList as $id) {
+            if ($mainClass !== null)
+                list ($id, $agency) = $mainClass->splitAgencyId($id);
+            $body .= $this->insertItemIdTag($id, $agency);
+        }
+        $body .= $this->allItemElementType();
+        if (! empty($mainClass->getMaximumItemsCount())) {
+            $body .= "<ns1:MaximumItemsCount>" .
+                    htmlspecialchars($mainClass->getMaximumItemsCount()) .
+                    "</ns1:MaximumItemsCount>";
+        }
+        if (! empty($nextItemToken)) {
+            $body .= "<ns1:NextItemToken>" . htmlspecialchars($nextItemToken) .
+            "</ns1:NextItemToken>";
+        }
+        $body .= "</ns1:LookupItemSet>";
+        return $this->header() . $body . $this->footer();
+    }
+
+    public function LUISBibItem($bibItemList, $nextItemToken = null, XCNCIP2 $mainClass = null) {
+        $body = "<ns1:LookupItemSet>";
+        foreach ($bibItemList as $id) {
+            if ($mainClass !== null)
+                list ($id, $agency) = $mainClass->splitAgencyId($id);
+            $body .= $this->insertBibliographicItemIdTag($id);
+        }
+        $body .= $this->allItemElementType();
+        if (! empty($mainClass->getMaximumItemsCount())) {
+            $body .= "<ns1:MaximumItemsCount>" .
+                    htmlspecialchars($mainClass->getMaximumItemsCount()) .
+                    "</ns1:MaximumItemsCount>";
+        }
+        if (! empty($nextItemToken)) {
+            $body .= "<ns1:NextItemToken>" . htmlspecialchars($nextItemToken) .
+            "</ns1:NextItemToken>";
+        }
+        $body .= "</ns1:LookupItemSet>";
         return $this->header() . $body . $this->footer();
     }
 
@@ -108,12 +185,14 @@ class NCIPRequests extends OldNCIPRequests {
         "<ns1:LookupUser>" .
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
+        // Do not use htmlspecialchars for $extras.
         $extras .
         "</ns1:LookupUser>";
         return $this->header() . $body . $this->footer();
     }
 
     protected function insertInitiationHeader($to, $from = "CPK") {
+        if (empty($to)) $to = $this->sigla;
         $initiationHeader =
         "<ns1:InitiationHeader>" .
         "<ns1:FromAgencyId>" .
@@ -147,6 +226,7 @@ class NCIPRequests extends OldNCIPRequests {
     }
 
     protected function insertAgencyIdTag($agency) {
+        if (empty($agency)) $agency = $this->sigla;
         if (empty($agency)) return '';
         return ($this->noScheme ?
                 "<ns1:AgencyId>" :
@@ -154,10 +234,10 @@ class NCIPRequests extends OldNCIPRequests {
         htmlspecialchars($agency) . "</ns1:AgencyId>";
     }
 
-    protected function insertItemIdTag($itemId, $patron) {
+    protected function insertItemIdTag($itemId, $agency) {
         $body =
         "<ns1:ItemId>" .
-        $this->insertAgencyIdTag($patron['agency']) .
+        $this->insertAgencyIdTag($agency) .
         $this->insertItemIdentifierType() .
         "<ns1:ItemIdentifierValue>" . htmlspecialchars($itemId) . "</ns1:ItemIdentifierValue>" .
         "</ns1:ItemId>";
@@ -172,9 +252,22 @@ class NCIPRequests extends OldNCIPRequests {
                 "<ns1:RequestIdentifierType>" :
                 "<ns1:RequestIdentifierType ns1:Scheme=\"http://www.library.sk/ncip/v2_02/schemes.scm\">") .
                 "IDX" . "</ns1:RequestIdentifierType>" .
-        "<ns1:RequestIdentifierValue>" . $requestId . "</ns1:RequestIdentifierValue>" .
+        "<ns1:RequestIdentifierValue>" . htmlspecialchars($requestId) . "</ns1:RequestIdentifierValue>" .
         "</ns1:RequestId>";
         return body;
+    }
+
+    protected function insertBibliographicItemIdTag($itemId) {
+        $body =
+        "<ns1:BibliographicId>" .
+        "<ns1:BibliographicItemId>" .
+        "<ns1:BibliographicItemIdentifier>" .
+        htmlspecialchars($itemId) .
+        "</ns1:BibliographicItemIdentifier>" .
+        $this->bibliographicItemIdentifierCode("Legal Deposit Number") .
+        "</ns1:BibliographicItemId>" .
+        "</ns1:BibliographicId>";
+        return $body;
     }
 
     /* Allowed values are: Accession Number, Barcode. */
@@ -190,16 +283,16 @@ class NCIPRequests extends OldNCIPRequests {
 
     protected function allItemElementType() {
         $body =
-        $this->itemElementType("Bibliographic Description") .
-        $this->itemElementType("Hold Queue Length") .
-        $this->itemElementType("Circulation Status") .
-        $this->itemElementType("Electronic Resource") .
-        $this->itemElementType("Item Use Restriction Type") .
-        $this->itemElementType("Location") .
-        $this->itemElementType("Physical Condition") .
-        $this->itemElementType("Security Marker") .
-        $this->itemElementType("Item Description") .
-        $this->itemElementType("Sensitization Flag");
+        $this->insertItemElementType("Bibliographic Description") .
+        $this->insertItemElementType("Hold Queue Length") .
+        $this->insertItemElementType("Circulation Status") .
+        $this->insertItemElementType("Electronic Resource") .
+        $this->insertItemElementType("Item Use Restriction Type") .
+        $this->insertItemElementType("Location") .
+        $this->insertItemElementType("Physical Condition") .
+        $this->insertItemElementType("Security Marker") .
+        $this->insertItemElementType("Item Description") .
+        $this->insertItemElementType("Sensitization Flag");
         // TODO
         /*if (library.equals("Liberec")) {
             body =
@@ -215,30 +308,37 @@ class NCIPRequests extends OldNCIPRequests {
 
     protected function allUserElementType() {
         $body =
-        insertUserElementType("Authentication Input") .
-        insertUserElementType("Block Or Trap") .
-        insertUserElementType("Date Of Birth") .
-        insertUserElementType("Name Information") .
-        insertUserElementType("User Address Information") .
-        insertUserElementType("User Language") .
-        insertUserElementType("User Privilege") .
-        insertUserElementType("User Id") .
-        insertUserElementType("Previous User Id");
-        // TODO
-        /*if (library.equals("Liberec")) {
-            body =
-            insertUserElementType("Name Information") +
-            insertUserElementType("User Address Information");
-        }*/
+        $this->insertUserElementType("Authentication Input") .
+        $this->insertUserElementType("Block Or Trap") .
+        $this->insertUserElementType("Date Of Birth") .
+        $this->insertUserElementType("Name Information") .
+        $this->insertUserElementType("User Address Information") .
+        $this->insertUserElementType("User Language") .
+        $this->insertUserElementType("User Privilege") .
+        $this->insertUserElementType("User Id") .
+        $this->insertUserElementType("Previous User Id");
+        if ($this->sigla == "LIA001") {
+            $body =
+            $this->insertUserElementType("Name Information") .
+            $this->insertUserElementType("User Address Information");
+        }
         return $body;
     }
 
-    protected function itemElementType($value) {
+    protected function insertItemElementType($value) {
         return ($this->noScheme ?
                 "<ns1:ItemElementType>" :
                 "<ns1:ItemElementType ns1:Scheme=\"http://www.niso.org/ncip/v1_0/schemes/itemelementtype/" .
                 "itemelementtype.scm\">") .
                 htmlspecialchars($value) . "</ns1:ItemElementType>";
+    }
+
+    protected function insertUserElementType($value) {
+        return ($this->noScheme ?
+                "<ns1:UserElementType>" :
+                "<ns1:UserElementType ns1:Scheme=\"http://www.niso.org/ncip/v1_0/schemes/userelementtype/" .
+                "userelementtype.scm\">") .
+                htmlspecialchars($value) . "</ns1:UserElementType>";
     }
 
     /* Allowed values are: Hold, Loan. Estimate is also used. */
@@ -256,5 +356,20 @@ class NCIPRequests extends OldNCIPRequests {
                 "<ns1:RequestScopeType ns1:Scheme=\"http://www.niso.org/ncip/v1_0/imp1/schemes/requestscopetype/" .
                 "requestscopetype.scm\">") .
                 htmlspecialchars($value) . "</ns1:RequestScopeType>";
+    }
+
+    /* Allowed values are: Legal Deposit Number, ISBN. */
+    protected function bibliographicItemIdentifierCode($value) {
+        return ($this->noScheme ?
+                "<ns1:BibliographicItemIdentifierCode>" :
+                "<ns1:BibliographicItemIdentifierCode ns1:Scheme=\"http://www.niso.org/ncip/v1_0/imp1/schemes/" .
+                "bibliographicitemidentifiercode/bibliographicitemidentifiercode.scm\">") .
+                htmlspecialchars($value) .
+                "</ns1:BibliographicItemIdentifierCode>";
+    }
+
+    protected function userAuthenticationInputType() {
+        //if (library.equals("Zlin")) return "Username"; // TODO
+        return "User Id";
     }
 }

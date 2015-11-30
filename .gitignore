@@ -5,6 +5,7 @@ ChangeLog
 .\#*
 TAGS
 *~
+import/solrmarc.log
 vendor/.git
 .project
 .buildpath
@@ -14,3 +15,4 @@ messages-front.log
 cache
 log
 .settings
+git-3way-merge.local.cfg

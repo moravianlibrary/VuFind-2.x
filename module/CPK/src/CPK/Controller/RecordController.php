@@ -45,6 +45,8 @@ class RecordController extends RecordControllerBase
         HoldsTrait::holdAction insteadof HoldsTraitBase;
     }
 
+    protected $recordLoader = null;
+
     /**
      * Display a particular tab.
      *
@@ -57,6 +59,10 @@ class RecordController extends RecordControllerBase
      */
     protected function showTab($tab, $ajax = false)
     {
+        if ($this->params()->fromQuery('getXml')) {
+            return $this->getXml();
+        }
+        
         // Special case -- handle login request (currently needed for holdings
         // tab when driver-based holds mode is enabled, but may also be useful
         // in other circumstances):
@@ -110,7 +116,13 @@ class RecordController extends RecordControllerBase
                 $view->$varName = $field7xx;
             }
         }
+        
+        // getCitation
+        $citation = $this->getCitation();
+        if ($citation !== false)
+            $view->citation = $citation;
 
+        //
         $view->config = $this->getConfig();
 
         $view->setTemplate($ajax ? 'record/ajaxtab' : 'record/view');
@@ -125,8 +137,11 @@ class RecordController extends RecordControllerBase
     protected function get856Links()
     {
         $parentRecordID = $this->driver->getParentRecordID();
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-        $recordDriver = $recordLoader->load($parentRecordID);
+
+        if ($this->recordLoader === null)
+            $this->recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+
+        $recordDriver = $this->recordLoader->load($parentRecordID);
         $links = $recordDriver->get856Links();
         return $links;
     }
@@ -140,48 +155,97 @@ class RecordController extends RecordControllerBase
     protected function get866Data()
     {
     	$parentRecordID = $this->driver->getParentRecordID();
-    	$recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-    	$recordDriver = $recordLoader->load($parentRecordID);
+
+    	if ($this->recordLoader === null)
+    	    $this->recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+
+    	$recordDriver = $this->recordLoader->load($parentRecordID);
     	$links = $recordDriver->get866Data();
     	return $links;
     }
 
     /**
-     * Get default tab for a given driver
+     * Support method to load tab information from the RecordTabPluginManager.
      *
-     * @return string
+     * @return void
      */
-    protected function getDefaultTab()
+    protected function loadTabDetails()
     {
-        // Load default tab if not already retrieved:
-        if (null === $this->defaultTab) {
-            // Load record driver tab configuration:
-            $driver = $this->loadRecord();
-            $this->defaultTab = $this->getDefaultTabForRecord($driver);
+        parent::loadTabDetails();
 
-            $linksFrom856 = $this->get856Links();
-            $field866 = $this->get866Data();
-            $noLinksFrom856 = $linksFrom856 === false ? 0 : count($linksFrom856);
-            $noLinksFrom866 = $field866 === false ? 0 : count($field866);
-            $linksCount = $noLinksFrom856 + $noLinksFrom866;
-            if ($linksCount > 0) {
-                if (empty($holdings = $this->driver->getRealTimeHoldings())) $this->defaultTab = 'EVersion';
-            }
+        if (empty($this->driver->getRealTimeHoldings())) {
 
-            // Missing/invalid record driver configuration? Fall back to configured
-            // default:
-            $tabs = $this->getAllTabs();
-            if (empty($this->defaultTab) || !isset($tabs[$this->defaultTab])) {
-                $this->defaultTab = $this->fallbackDefaultTab;
-            }
-
-            // Is configured tab also invalid? If so, pick first existing tab:
-            if (empty($this->defaultTab) || !isset($tabs[$this->defaultTab])) {
-                $keys = array_keys($tabs);
-                $this->defaultTab = isset($keys[0]) ? $keys[0] : '';
-            }
+            // If there is no real holding to display, than show EVersion tab if
+            // there is something ..
+            if (count($this->get856Links()) || count($this->get866Data()))
+                $this->defaultTab = 'EVersion';
+        }
+    }
+    
+    public function getCitation()
+    {
+        $recordID = $this->driver->getUniqueID();
+    
+        $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
+                             .$recordID;
+        
+        $statusCode = get_headers($citationServerUrl)[0];
+        
+        if ($statusCode !== 'HTTP/1.1 200 OK') {
+            $citation = false;
+        } else {
+            $soap = curl_init();
+            curl_setopt($soap, CURLOPT_URL, $citationServerUrl);
+            curl_setopt($soap, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($soap, CURLOPT_TIMEOUT, 10);
+            curl_setopt($soap, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($soap, CURLOPT_SSL_VERIFYPEER, 0);
+            curl_setopt($soap, CURLOPT_SSL_VERIFYHOST, 0);
+            
+            $citation = curl_exec($soap);
+            curl_close($soap);
         }
 
-        return $this->defaultTab;
+        return $citation;
+    }
+    
+    protected function getXml()
+    {
+        $recordID = $this->driver->getUniqueID();
+        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+        $recordDriver = $recordLoader->load($recordID);
+        
+        $parentRecordID = $recordDriver->getParentRecordID();
+        $parentRecordDriver = $recordLoader->load($parentRecordID);
+        
+        $format = $parentRecordDriver->getRecordType();
+        if ($format === 'marc')
+            $format .= '21';
+        $recordXml = $parentRecordDriver->getXml($format);
+        
+        session_regenerate_id();
+        $sessionId = session_id();
+        
+        $xml = '<?xml version = "1.0" encoding = "UTF-8"?>
+<publish-avail>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+<ListRecords>
+<record>
+<header>
+<identifier>cpk-record-id:'.$recordID.'</identifier>
+</header>
+<metadata>'.$recordXml.'</metadata>
+</record>
+</ListRecords>
+</OAI-PMH>
+<session-id>'.$sessionId.'</session-id>
+</publish-avail>';
+        
+        $response = new \Zend\Http\Response();
+        $response->getHeaders()->addHeaderLine('Content-Type', 'text/xml; charset=utf-8');
+        $response->setContent($xml);
+        return $response;
     }
 }

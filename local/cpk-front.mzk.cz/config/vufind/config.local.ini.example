@@ -22,6 +22,8 @@ theme		= cpk-devel-green
 defaultCurrency	= CZK
 browserDetectLanguage = false
 
+notificationsEnabled = true
+
 [Record]
 ;This will build links from 7xx fiedls. Link is build from subfields x or z for searching by ISN, 
 ; or t for searching by AllFields.\
@@ -156,16 +158,18 @@ fzu.cas.cz = https://jiftach.cas.cz/loga/logo-fzu-40.png
 ibp.cas.cz = https://jiftach.cas.cz/loga/logo-ibp-44.png
 osu.cz = https://idptoo.osu.cz/simplesaml/logo_ou.png
 digiknihovna.cz = https://shibboleth.digiknihovna.cz/logo.png
+vkta.knihovny.cz = https://vkta.knihovny.cz/logo.png
+kfbz.knihovny.cz = http://kfbz.cz/sites/all/themes/kzlin/images/logo2.png
 
 facebook.extidp.cesnet.cz = https://extidp.cesnet.cz/idp/loga/fb50.png
 mojeid.extidp.cesnet.cz = https://extidp.cesnet.cz/idp/loga/mojeid50.png
 google.extidp.cesnet.cz = https://extidp.cesnet.cz/idp/loga/googleicon50.png
 linkedin.extidp.cesnet.cz = https://extidp.cesnet.cz/idp/loga/LinkedIn50.png
 
-[IdPLogosMappedToSolr]
-ntk = techlib.cz 
-nlk = medvik.cz 
-svkhk = svkhk.cz 
-nkp = nkp.cz 
-mzk = mzk.cz 
-tre = digiknihovna.cz
+ntk 	= https://www.techlib.cz/public/images/logo-eduid.png
+nlk 	= https://www.medvik.cz/images/medvik-logo.png
+svkhk 	= https://aleph.svkhk.cz/idp/images/logo_40.png
+nkp	= https://www2.eduid.cz/idp-loga/nkp.png
+tre 	= https://shibboleth.digiknihovna.cz/logo.png
+mzk 	= https://www2.eduid.cz/idp-loga/mzk.png
+vkta 	= https://vkta.knihovny.cz/logo.png

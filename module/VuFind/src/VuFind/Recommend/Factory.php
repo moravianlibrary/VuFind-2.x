@@ -175,8 +175,11 @@ class Factory
      */
     public static function getFavoriteFacets(ServiceManager $sm)
     {
+        $parentSm = $sm->getServiceLocator();
         return new FavoriteFacets(
-            $sm->getServiceLocator()->get('VuFind\Config')
+            $parentSm->get('VuFind\Config'),
+            null,
+            $parentSm->get('VuFind\AccountCapabilities')->getTagSetting()
         );
     }
 
@@ -201,7 +204,7 @@ class Factory
      *
      * @return NewItems
      */
-    public function getNewItems(ServiceManager $sm)
+    public static function getNewItems(ServiceManager $sm)
     {
         return new NewItems(
             $sm->getServiceLocator()->get('VuFind\Config')
@@ -315,7 +318,7 @@ class Factory
      *
      * @return RecommendLinks
      */
-    public function getRecommendlinks(ServiceManager $sm)
+    public static function getRecommendlinks(ServiceManager $sm)
     {
         return new \VuFind\Recommend\RecommendLinks(
             $sm->getServiceLocator()->get('VuFind\Config')

@@ -1,10 +1,10 @@
 <?=$this->doctype('HTML5')?>
 <html lang="<?=explode("-", $this->layout()->userLang)[0]?>">
-  <head>
+<head>
     <?$this->headThemeResources()?>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
     <?=$this->headMeta()?>
     <?=$this->headTitle()?>
     <?
@@ -18,25 +18,43 @@
         )
       );
     ?>
+    <!-- RTL styling -->
+    <? if ($this->layout()->rtl) {
+      $this->headLink()->appendStylesheet('vendor/bootstrap-rtl.min.css');
+    } ?>
     <?=$this->headLink()?>
     <?=$this->headStyle()?>
     <?
-      // Set global path for Javascript code:
-      $this->headScript()->prependScript("path = '" . rtrim($this->url('home'), '/') . "';");
-
-      // Deal with cart stuff:
       if (!isset($this->renderingError)) {
-        $cart = $this->cart();
+        // Add translation strings
         $this->jsTranslations()->addStrings(
           array(
             'bulk_email_success' => 'bulk_email_success',
+            'bulk_noitems_advice' => 'bulk_noitems_advice',
             'bulk_save_success' => 'bulk_save_success',
             'close' => 'close',
             'loading' => 'Loading',
             'sms_success' => 'sms_success',
-            'number_thousands_separator' => ['number_thousands_separator', null, ',']
+            'number_thousands_separator' => ['number_thousands_separator', null, ','],
+            'in_titles' => 'in_titles',
+            'in_authors' => 'in_authors',
+            'in_subjects' => 'in_subjects'
           )
         );
+        // Add libphonenumber.js strings
+        $this->jsTranslations()->addStrings(
+          array(
+            "'Phone number invalid'" => 'libphonenumber_invalid',
+            "'Invalid country calling code'" => 'libphonenumber_invalidcountry',
+            "'Invalid region code'" => 'libphonenumber_invalidregion',
+            "'The string supplied did not seem to be a phone number'" => 'libphonenumber_notanumber',
+            "'The string supplied is too long to be a phone number'" => 'libphonenumber_toolong',
+            "'The string supplied is too short to be a phone number'" => 'libphonenumber_tooshort',
+            "'Phone number too short after IDD'" => 'libphonenumber_tooshortidd'
+          )
+        );
+        // Deal with cart stuff:
+        $cart = $this->cart();
         if ($cart->isActive()) {
           $this->headScript()->appendFile("vendor/cookies.js");
           $this->headScript()->appendFile("cart.js");
@@ -61,7 +79,6 @@
             )
           );
         }
-        $this->headScript()->appendScript($this->jsTranslations()->getScript());
         $this->headScript()->appendScript(
           'var userIsLoggedIn = ' . ($this->auth()->isLoggedIn() ? 'true' : 'false') . ';'
         );
@@ -87,6 +104,7 @@
 
             } elseif($authManager->getAuthMethod() === "ShibbolethIdentityManager") {
                 $authMethod = $authManager->getAuthInstance("ShibbolethIdentityManager");
+                $isActiveShibbolethIdentityManager = true;
             }
 
             if ($authMethod && $authMethod->isShibAssertionExportEnabled()) {
@@ -98,11 +116,46 @@
             }
         }
 
-      ?>
+        /*
+         * Will we show the notifications ??
+         */
+        $user = $authManager->isLoggedIn();
+
+        $libraryCards = [];
+        
+        $notificationsEnabled = false;
+
+        if ($authManager instanceof \CPK\Auth\Manager) {
+            $notificationsEnabled = $authManager->isNotificationSystemEnabled();     
+
+            if ($notificationsEnabled) {
+                $this->headScript()->appendFile("async-notifications.js");
+            }
+        }
+        
+        if ($user) {
+            $libraryCards = $user->getLibraryCards(false);
+        }
+
+        $headerParams = [
+            'account' => $authManager,
+            'user' => $user,
+            'libraryCards' => $libraryCards,
+            'notificationsEnabled' => $notificationsEnabled,
+            'isActiveShibbolethIdentityManager' => $isActiveShibbolethIdentityManager
+        ];
+    ?>
 
     <?=$this->headScript()?>
+    <script>
+      var VuFind = new VuFindNamespace(
+        '<?=rtrim($this->url('home'), '/') ?>',
+        <?=$this->jsTranslations()->getJSON() ?>
+      );
+    </script>
   </head>
-  <body>
+<body
+	class="<?=$this->layoutClass('offcanvas-row')?><? if ($this->layout()->rtl): ?> rtl<? endif; ?>">
     <?=$this->render('cookies-agreement.phtml')?>
     <?=$this->render('info.phtml')?>
     <? // Set up the search box -- there are three possible cases:
@@ -115,12 +168,14 @@
         $this->layout()->searchbox = $this->render('search/searchbox.phtml');
       }
     ?>
-    <header role="banner" class="hidden-print">
-      <div class="container navbar navbar-inverse">
-        <a class="sr-only" href="#content"><?=$this->transEsc('Skip to content') ?></a>
-        <?=$this->render('header.phtml')?>
-      </div>
-      <div class="container">
+    <header class="hidden-print">
+		<div class="container navbar navbar-inverse">
+			<div class="red-box">
+				<a class="sr-only" href="#content"><?=$this->transEsc('Skip to content') ?></a>
+          <?=$this->render('header.phtml', $headerParams)?>
+        </div>
+		</div>
+		<div class="container">
           <? if ($this->layout()->searchbox !== false): ?>
           <div class="well clearfix">
           <?=$this->layout()->searchbox ?>
@@ -131,8 +186,10 @@
                 * This part creates button to show/hide division containing messages, which is created later
                 */
                 if($assertionExportEnabled): ?>
-                    <button id="shibAssertionHandler" class="btn btn-link" style="float: right" onclick="handleShibAssertion()" >Show Shib Assertions</button>
-                    <script type="text/javascript">
+                    <button id="shibAssertionHandler"
+					class="btn btn-link" style="float: right"
+					onclick="handleShibAssertion()">Show Shib Assertions</button>
+				<script type="text/javascript">
                     function handleShibAssertion() {
                          var __display = document.getElementById('shibAssertionExport').style.display;
                          if (__display == 'block') {
@@ -156,7 +213,9 @@
         * This part echoes messages to separate division to have it beautiful.
         */
         if($assertionExportEnabled): ?>
-            <div class="container" id="shibAssertionExport" style="display: none"><div class="well clearfix">
+            <div class="container" id="shibAssertionExport"
+			style="display: none">
+			<div class="well clearfix">
             <? for($i = 0; $i < sizeof($assertions);) {
                 $assertion = htmlentities($assertions[$i]);
 
@@ -166,34 +225,37 @@
                 // Render it
                 ?><h3>Assertion number <?=++$i?></h3><?=$assertion ?><?
             } ?>
-            </div></div>
+            </div>
+		</div>
         <? endif; ?>
 
     </header>
-    <div role="main" class="main template-dir-<?=$this->templateDir?> template-name-<?=$this->templateName?>">
-      <div class="container">
+	<div role="main"
+		class="main template-dir-<?=$this->templateDir?> template-name-<?=$this->templateName?>">
+		<div class="container">
         <?=$this->layout()->content ?>
       </div>
-    </div>
-    <footer role="contentinfo" class="hidden-print">
-      <div class="container">
+	</div>
+	<footer class="hidden-print">
+		<div class="container">
         <?=$this->render('footer.phtml')?>
         <?=$this->layout()->poweredBy ?>
       </div>
-    </footer>
-    <!-- MODAL IN CASE WE NEED ONE -->
-    <div id="modal" class="modal fade hidden-print" tabindex="-1" role="dialog" aria-labelledby="modalTitle" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-            <h4 id="modalTitle" class="modal-title"></h4>
-          </div>
-          <div class="modal-body"><?=$this->transEsc('Loading') ?>...</div>
-        </div>
-      </div>
-    </div>
-    <?=$this->googleanalytics()?>
+	</footer>
+	<!-- MODAL IN CASE WE NEED ONE -->
+	<div id="modal" class="modal fade hidden-print" tabindex="-1"
+		role="dialog" aria-labelledby="modalTitle" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal"
+						aria-hidden="true">&times;</button>
+					<h4 id="modalTitle" class="modal-title">&nbsp;</h4>
+				</div>
+				<div class="modal-body"><?=$this->transEsc('Loading') ?>...</div>
+			</div>
+		</div>
+	</div>
     <?=$this->piwik()?>
   </body>
 </html>

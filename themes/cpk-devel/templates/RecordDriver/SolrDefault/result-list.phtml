@@ -8,6 +8,7 @@
   }
 ?>
 <div class="<?=$this->driver->supportsAjaxStatus()?'ajaxItem ':''?>col-xs-12">
+    <div class="white-box clearfix">
     <div class="row">
         <div class="col-sm-2 col-xs-3 left">
             <? $recordId =  preg_replace("/\./", "", $recordId)?>
@@ -29,7 +30,7 @@
             <input type="hidden" value="<?=$this->escapeHtmlAttr($this->driver->getUniqueID())?>" class="hiddenId" />
             <input type="hidden" value="<?=$this->escapeHtmlAttr($this->driver->getResourceSource())?>" class="hiddenSource" />
         </div>
-    <div class="col-sm-10 col-xs-6 middle">
+    <div class="col-sm-10 col-xs-9 middle">
       <div class="root-title">
         <a href="<?=$this->recordLink()->getUrl($this->driver)?>" class="title">
         <?
@@ -105,20 +106,21 @@
             but even if we don't plan to display the link, we still want to get the $openUrl
             value for use in generating a COinS (Z3988) tag -- see bottom of file.
           */
-        $openUrl = $this->driver->getOpenURL();
-        $openUrlActive = $this->driver->openURLActive('results');
-        $urls = $this->record($this->driver)->getLinkDetails();
+        $openUrl = $this->openUrl($this->driver, 'results');
+        $openUrlActive = $openUrl->isActive();
+        // Account for replace_other_urls setting
+        $urls = $this->record($this->driver)->getLinkDetails($openUrlActive);
+
         if ($openUrlActive || !empty($urls)): ?>
         <? if ($openUrlActive): ?>
           <br/>
-          <?=$this->openUrl($openUrl)?>
-          <? if ($this->driver->replaceURLsWithOpenURL()) $urls = array(); // clear URL list if replace setting is active ?>
+          <?=$openUrl->renderTemplate()?>
         <? endif; ?>
       <? endif; ?>
 
       <?=$this->record($this->driver)->getPreviews()?>
 
-      <div class="format-list pull-right inline-block">
+      <div class="format-list pull-left inline-block">
         <?=$this->record($this->driver)->getFormatList()?>
       </div>
     </div>
@@ -150,7 +152,7 @@
         <? endforeach; ?>
       <? endif; ?>
 
-      <?=$openUrl?'<span class="Z3988" title="'.$this->escapeHtmlAttr($openUrl).'"></span>':''?>
+      <?=$this->driver->supportsCoinsOpenUrl()?'<span class="Z3988" title="'.$this->escapeHtmlAttr($this->driver->getCoinsOpenUrl()).'"></span>':''?>
     </div>
   </div>
   <hr class='records-in-libraries-divider'>
@@ -162,6 +164,7 @@
              echo $this->context($this)->renderInContext('RecordDriver/SolrDefault/records-in-libraries.phtml', array('records' => $dedupData, 'config' => $this->config));
 
          ?>
+  </div>
   </div>
 
 </div>
