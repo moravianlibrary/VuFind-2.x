@@ -560,4 +560,71 @@ class MyResearchController extends MyResearchControllerBase
             ->setNamespace('success')
             ->addMessage($msg);
     }
+    
+    /**
+     * Settings view
+     *
+     * @return Zend\View\Model\ViewModel
+     */
+    public function settingsAction()
+    {
+        // Stop now if the user does not have valid catalog credentials available:
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $this->flashExceptions($this->flashMessenger());
+            return $this->forceLogin();
+        }
+        
+        /* Citation style fieldset */
+        $citationStyleTable = $this->getTable('citationstyle');
+        $availableCitationStyles = $citationStyleTable->getAllStyles();
+        
+        $defaultCitationStyleValue = $this->getConfig()->Record->default_citation_style;
+        
+        foreach ($availableCitationStyles as $style) {
+            if ($style['value'] === $defaultCitationStyleValue) {
+                $defaultCitationStyle = $style['id'];
+                break;
+            }
+        }
+        
+        $userSettingsTable = $this->getTable("usersettings");
+        $preferedCitationStyle = $userSettingsTable->getUserCitationStyle($user);
+        
+        $selectedCitationStyle = (! empty($preferedCitationStyle)) 
+            ? $preferedCitationStyle 
+            : $defaultCitationStyle;
+        
+        $viewVars['selectedCitationStyle']   = $selectedCitationStyle;
+        $viewVars['availableCitationStyles'] = $availableCitationStyles;
+        
+        /* Records per page fieldset */
+        $searchesConfig = $this->getConfig('searches');
+        $recordsPerPageOptions = explode(",", $searchesConfig->General->limit_options);
+        $recordsPerPageDefaultValue = $searchesConfig->General->default_limit;
+        $preferredRecordsPerPageValue = $userSettingsTable->getRecordsPerPage($user);
+        
+        $selectedRecordsPerPageOption = (! empty($preferredRecordsPerPageValue))
+        ? $preferredRecordsPerPageValue
+        : $recordsPerPageDefaultValue;
+        
+        $viewVars['recordsPerPageOptions'] = $recordsPerPageOptions;
+        $viewVars['selectedRecordsPerPageOption'] = $selectedRecordsPerPageOption;
+        
+        /* Sorting fieldset */
+        $sortingOptions = $searchesConfig->Sorting->toArray();
+        $defaultSorting = $searchesConfig->General->default_sort;
+        $preferredSorting = $userSettingsTable->getSorting($user);
+        
+        $selectedSorting = (! empty($preferredSorting))
+        ? $preferredSorting
+        : $defaultSorting;
+        
+        $viewVars['sortingOptions'] = $sortingOptions;
+        $viewVars['selectedSorting'] = $selectedSorting;
+        
+        //
+        $view = $this->createViewModel($viewVars);
+        $this->flashExceptions($this->flashMessenger());
+        return $view;
+    }
 }

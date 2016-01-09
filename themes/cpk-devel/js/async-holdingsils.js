@@ -1,120 +1,143 @@
-$(getHoldingStatuses); // Launch this function onLoad event
+var holdingsILS = {
 
-// Async holdings loader
-function getHoldingStatuses(ids) {
+    bibId : undefined,
+
+    pointers : {
+	tbody : undefined
+    },
+
+    init : function() {
+
+	holdingsILS.bibId = $('input.hiddenId').val();
+
+	holdingsILS.pointers.tbody = $('body div#holdings-tab table tbody');
+
+	holdingsILS.getHoldingStatuses();
+    },
+
+    // Async holdings loader
+    getHoldingStatuses : function(ids) {
 
 	if (typeof ids !== 'object')
-		ids = getHoldingsIds();
-	
-	if (ids.length != 0) {
-		$
-				.ajax({
-					type : 'POST',
-					url : '/AJAX/JSON?method=getHoldingsStatuses',
-					dataType : 'json',
-					async : true,
-					// json object to sent to the authentication url
-					data : {
-						ids : ids
-					},
-					success : function(response) {
-						processGetHoldingStatusesResponse(response);
-					},
-					error : function(msg) {
-						console
-								.error("async-holdingsils.js produced an error while doing AJAX:\n"
-										+ msg);
-					}
-				})
-	}
-}
+	    ids = holdingsILS.getHoldingsIds();
 
-function getHoldingsIds(includingBeingLoadedIds) {
+	var activeFilter;
+	// If we have active filter, append it to the query
+	if (typeof holdingsILSfilters !== 'undefined') {
+
+	    holdingsILSfilters.init();
+
+	    activeFilter = holdingsILSfilters.activeFilter;
+	}
+
+	if (ids.length != 0) {
+
+	    var data = {
+		ids : ids,
+		bibId : holdingsILS.bibId
+	    };
+
+	    // Append the filter if any
+	    if (typeof activeFilter !== 'undefined')
+		data['activeFilter'] = activeFilter;
+
+	    $.ajax({
+		type : 'POST',
+		url : '/AJAX/JSON?method=getHoldingsStatuses',
+		dataType : 'json',
+		async : true,
+		// json object to sent to the authentication url
+		data : data,
+		success : function(response) {
+		    holdingsILS.processGetHoldingStatusesResponse(response);
+		},
+		error : function(msg) {
+		    console.error("async-holdingsils.js produced an error while doing AJAX:\n" + msg.toSource());
+		}
+	    })
+	}
+    },
+
+    getHoldingsIds : function(includingBeingLoadedIds) {
 
 	if (typeof includingBeingLoadedIds === 'undefined')
-		includingBeingLoadedIds = false;
+	    includingBeingLoadedIds = false;
 
 	var ids = [];
 
-	getAllNotLoadedHoldings(includingBeingLoadedIds).each(function() {
-		ids.push($(this).attr('id'));
+	holdingsILS.getAllNotLoadedHoldings(includingBeingLoadedIds).each(function() {
+	    ids.push($(this).attr('id'));
 
-		// Add loading class so that we know about being it parsed
-		$(this).addClass('loading');
+	    // Add loading class so that we know about being it parsed
+	    $(this).addClass('loading');
 	});
 
 	return ids;
-}
+    },
 
-function getAllNotLoadedHoldings(includingBeingLoaded) {
+    getAllNotLoadedHoldings : function(includingBeingLoaded) {
 
 	if (typeof includingBeingLoaded === 'undefined')
-		includingBeingLoaded = true;
+	    includingBeingLoaded = true;
 
 	var selector;
 
 	if (includingBeingLoaded) {
-		selector = 'tr[data-type=holding]:not(.loaded):not([hidden=hidden])';
+	    selector = 'tr:not(.loaded, .hidden)';
 	} else {
-		selector = 'tr[data-type=holding]:not(.loading, .loaded):not([hidden=hidden])';
+	    selector = 'tr:not(.loading, .loaded, .hidden)';
 	}
 
-	return $(selector);
-}
+	return holdingsILS.pointers.tbody.children(selector);
+    },
 
-function processGetHoldingStatusesResponse(r) {
+    processGetHoldingStatusesResponse : function(r) {
 
 	var data = r.data;
 
 	if (typeof data.statuses !== 'undefined') {
 
-		// Update the status
-		$.each(data.statuses, function(key, value) {
-			updateHoldingId(key, value);
-		});
+	    // Update the status
+	    $.each(data.statuses, function(key, value) {
+		holdingsILS.updateHoldingId(key, value);
+	    });
 
-		if (data.remaining) {
-			getHoldingStatuses(data.remaining);
-		}
-		else {
-			getAllNotLoadedHoldings(true).each(function() {
-				updateHoldingId(this, data, true);
-			});
-		}
+	    if (data.remaining) {
+		holdingsILS.getHoldingStatuses(data.remaining);
+	    } else {
+		holdingsILS.getAllNotLoadedHoldings(true).each(function() {
+		    holdingsILS.updateHoldingId(this, data, true);
+		});
+	    }
 	} else {
 
-		// Show error messages
-		getAllNotLoadedHoldings(true).each(function() {
-			updateHoldingId(this, data, true);
-		});
+	    // Show error messages
+	    holdingsILS.getAllNotLoadedHoldings(true).each(function() {
+		holdingsILS.updateHoldingId(this, data, true);
+	    });
 	}
-}
+    },
 
-function updateHoldingId(id, value, setUnknownLabel) {
+    updateHoldingId : function(id, value, setUnknownLabel) {
 
 	if (typeof setUnknownLabel === 'undefined')
-		setUnknownLabel = false;
+	    setUnknownLabel = false;
 
 	var tableRow;
 
 	if (!id)
-		return null;
+	    return null;
 
 	if (typeof id === 'object') {
 
-		tableRow = $(id);
+	    tableRow = $(id);
 
 	} else {
 
-		// Escape special chars ..
-		id = id.replace(/([.:])/g, '\\$1');
-
-		tableRow = $("tr#" + id);
+	    tableRow = holdingsILS.pointers.tbody.children("tr#" + id);
 	}
 
-	var statusDiv = tableRow.find('[data-type=item-status]')[0], icon = $(
-			statusDiv).children('i'), label = $(statusDiv).children(
-			'span.label');
+	var statusDiv = tableRow.find('td div[data-type=item-status]').first(), icon = statusDiv.children('i'), label = statusDiv.children('span.label');
 
 	// Purge the loading icon
 	icon.remove();
@@ -122,66 +145,70 @@ function updateHoldingId(id, value, setUnknownLabel) {
 	var status = value.status;
 	// Set status to the label
 	if (typeof status !== 'undefined')
-		label.text(status);
+	    label.text(status);
 	else {
-		label.text('unknown status');
-		setUnknownLabel = true;
+	    label.text('unknown status');
+	    setUnknownLabel = true;
 	}
 
 	var availability = value.availability;
 
 	if (typeof availability !== 'undefined') {
-		var availabilitySpan = tableRow.find('[data-type=availability]')[0];
+	    var availabilitySpan = statusDiv.children('span[data-type=availability]');
 
-		availabilitySpan.textContent = availability;
+	    availabilitySpan.text(availability);
 	}
 
-	var divLink = tableRow.find('[data-type=link]')[0];
+	// divLink does not exist until logged in ..
+	var divLink = tableRow.find('td div[data-type=link]').first();
 
-	var dueDate = value.due_date;
+	var dueDate = value.duedate, labelSet = false;
 	if (typeof dueDate !== 'undefined' && dueDate) {
 
-		// We have some due date here ..
-		var dueDateColumn = $(tableRow.children('[data-type=due_date]')[0]);
-		dueDateColumn.text(dueDate);
+	    // We have some due date here ..
+	    var dueDateColumn = tableRow.children('td[data-type=duedate]').first();
+	    dueDateColumn.text(dueDate);
 
-		label.removeClass('label-primary').addClass('label-warning');
+	    label.removeClass('label-primary').addClass('label-warning');
+	    labelSet = true;
+	}
 
-		if (typeof divLink !== 'undefined')
-			divLink.remove();
+	if (value.addLink) {
 
-	} else {
+	    toBeBroken: if (typeof divLink !== 'undefined') {
+		// Show hidden link
+		var linkSpan = divLink.find('a span'), holdType = value.holdtype;
 
-		if (setUnknownLabel) {
-			label.removeClass('label-primary').addClass('label-unknown');
-
-			if (typeof divLink !== 'undefined')
-				divLink.remove();
-
-		} else {
-			var labelType = typeof value.label === 'undefined' ? 'label-success'
-					: value.label;
-
-			label.removeClass('label-primary').addClass(labelType);
-
-			toBeBroken: if (typeof divLink !== 'undefined') {
-				// Show hidden link
-				var linkSpan = divLink.children[0].children[0], holdType = value.hold_type;
-
-				if (typeof holdType === 'undefined') {
-					holdType = 'Reserve';
-				} else if (holdType === 'false') {
-					divLink.remove();
-					break toBeBroken;
-				}
-
-				linkSpan.innerHTML = holdType;
-
-				$(divLink).removeAttr('hidden');
-			}
+		if (typeof holdType === 'undefined') {
+		    holdType = 'Reserve';
+		} else if (holdType === 'false') {
+		    divLink.remove();
+		    break toBeBroken;
 		}
+
+		linkSpan.text(holdType);
+
+		divLink.removeAttr('hidden');
+	    }
+	} else {
+	    divLink.remove();
+
+	    if (setUnknownLabel) {
+		label.removeClass('label-primary').addClass('label-unknown');
+		labelSet = true;
+	    }
+	}
+
+	if (labelSet === false) {
+	    var labelType = typeof value.label === 'undefined' ? 'label-success' : value.label;
+
+	    label.removeClass('label-primary').addClass(labelType);
 	}
 
 	tableRow.removeClass('loading').addClass('loaded');
 
+    },
 }
+
+// Init on DOM load
+$(holdingsILS.init);

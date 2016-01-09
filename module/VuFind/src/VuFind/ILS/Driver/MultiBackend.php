@@ -386,6 +386,7 @@ class MultiBackend extends AbstractBase
         if ($driver) {
             $profile = $driver
                 ->getMyProfile($this->stripIdPrefixes($patron, $source));
+            $profile['source'] = $source;
             return $this->addIdPrefixes($profile, $source);
         }
         return [];
@@ -506,6 +507,7 @@ class MultiBackend extends AbstractBase
         $driver = $this->getDriver($source);
         if ($driver) {
             $fines = $driver->getMyFines($this->stripIdPrefixes($patron, $source));
+            $fines['source'] = $source;
             return $this->addIdPrefixes($fines, $source);
         }
         throw new ILSException('No suitable backend driver found');
@@ -1026,7 +1028,8 @@ class MultiBackend extends AbstractBase
      * Place ILL Request
      *
      * Attempts to place an ILL request on a particular item and returns
-     * an array with result details or a PEAR error on failure of support classes
+     * an array with result details (or throws an exception on failure of support
+     * classes)
      *
      * @param array $details An array of item and patron data
      *

@@ -1,10 +1,10 @@
 <?php
 /**
- * MyResearch Controller
+ * Record Controller
  *
  * PHP version 5
  *
- * Copyright (C) Villanova University 2010.
+ * Copyright (C) Moravian Library 2016.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2,
@@ -22,12 +22,13 @@
  * @category VuFind2
  * @package  Controller
  * @author   Martin Kravec <Martin.Kravec@mzk.cz>
- * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
+ * @license  http://opensource.org/licenses/gpl-3.0.php GNU General Public License
  * @link     http://vufind.org   Main Site
  */
 namespace CPK\Controller;
 
-use MZKCommon\Controller\RecordController as RecordControllerBase, VuFind\Controller\HoldsTrait as HoldsTraitBase;
+use MZKCommon\Controller\RecordController as RecordControllerBase, 
+VuFind\Controller\HoldsTrait as HoldsTraitBase;
 
 /**
  * Redirects the user to the appropriate default VuFind action.
@@ -35,7 +36,7 @@ use MZKCommon\Controller\RecordController as RecordControllerBase, VuFind\Contro
  * @category VuFind2
  * @package Controller
  * @author Martin Kravec <Martin.Kravec@mzk.cz>
- * @license http://opensource.org/licenses/gpl-2.0.php GNU General Public License
+ * @license http://opensource.org/licenses/gpl-3.0.php GNU General Public License
  * @link http://vufind.org Main Site
  */
 class RecordController extends RecordControllerBase
@@ -116,12 +117,20 @@ class RecordController extends RecordControllerBase
                 $view->$varName = $field7xx;
             }
         }
-        
-        // getCitation
-        $citation = $this->getCitation();
-        if ($citation !== false)
-            $view->citation = $citation;
 
+        // Set preferred citation style
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $view->preferredCitationStyle = $this->getConfig()
+                ->Record->default_citation_style;
+        } else {
+            $userSettingsTable = $this->getTable("usersettings");
+            $citationStyleTable = $this->getTable("citationstyle");
+            $preferredCitationStyleId = $userSettingsTable
+                ->getUserCitationStyle($user);
+            $view->preferredCitationStyle = $citationStyleTable
+                ->getCitationValueById($preferredCitationStyleId);
+        }
+        
         //
         $view->config = $this->getConfig();
 
@@ -139,13 +148,13 @@ class RecordController extends RecordControllerBase
         $parentRecordID = $this->driver->getParentRecordID();
 
         if ($this->recordLoader === null)
-            $this->recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+            $this->recordLoader = $this->getServiceLocator()
+                ->get('VuFind\RecordLoader');
 
         $recordDriver = $this->recordLoader->load($parentRecordID);
         $links = $recordDriver->get856Links();
         return $links;
     }
-
 
     /**
      * Returns data from SOLR representing links and metadata to access SFX
@@ -157,7 +166,8 @@ class RecordController extends RecordControllerBase
     	$parentRecordID = $this->driver->getParentRecordID();
 
     	if ($this->recordLoader === null)
-    	    $this->recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+    	    $this->recordLoader = $this->getServiceLocator()
+    	       ->get('VuFind\RecordLoader');
 
     	$recordDriver = $this->recordLoader->load($parentRecordID);
     	$links = $recordDriver->get866Data();
@@ -181,34 +191,7 @@ class RecordController extends RecordControllerBase
                 $this->defaultTab = 'EVersion';
         }
     }
-    
-    public function getCitation()
-    {
-        $recordID = $this->driver->getUniqueID();
-    
-        $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
-                             .$recordID;
-        
-        $statusCode = get_headers($citationServerUrl)[0];
-        
-        if ($statusCode !== 'HTTP/1.1 200 OK') {
-            $citation = false;
-        } else {
-            $soap = curl_init();
-            curl_setopt($soap, CURLOPT_URL, $citationServerUrl);
-            curl_setopt($soap, CURLOPT_CONNECTTIMEOUT, 10);
-            curl_setopt($soap, CURLOPT_TIMEOUT, 10);
-            curl_setopt($soap, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($soap, CURLOPT_SSL_VERIFYPEER, 0);
-            curl_setopt($soap, CURLOPT_SSL_VERIFYHOST, 0);
-            
-            $citation = curl_exec($soap);
-            curl_close($soap);
-        }
 
-        return $citation;
-    }
-    
     protected function getXml()
     {
         $recordID = $this->driver->getUniqueID();
@@ -226,11 +209,28 @@ class RecordController extends RecordControllerBase
         session_regenerate_id();
         $sessionId = session_id();
         
+        $hasControlfield002 = strpos($recordXml, 'controlfield tag="002"');
+        if ($hasControlfield002 === false) { // there is no controlfield 002
+            $afterTag = '</leader>';
+            $pos = strpos($recordXml, $afterTag);
+            $format = $parentRecordDriver->getCitationRecordType();
+            $newElement = "\n  <controlfield tag=\"002\">"
+                .$format
+                ."</controlfield>";
+            $recordXml = substr_replace(
+                $recordXml,
+                $newElement,
+                $pos+strlen($afterTag),
+                0
+            );
+        }
+        
         $xml = '<?xml version = "1.0" encoding = "UTF-8"?>
 <publish-avail>
 <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ 
+ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
 <ListRecords>
 <record>
 <header>
@@ -244,7 +244,10 @@ xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives
 </publish-avail>';
         
         $response = new \Zend\Http\Response();
-        $response->getHeaders()->addHeaderLine('Content-Type', 'text/xml; charset=utf-8');
+        $response->getHeaders()->addHeaderLine(
+            'Content-Type',
+            'text/xml; charset=utf-8'
+        );
         $response->setContent($xml);
         return $response;
     }

@@ -54,7 +54,8 @@ trait HoldsTrait
             return $patron;
         }
 
-        $source = reset(explode('.', $uniqueId));
+        $explodedUniqueId = explode('.', $uniqueId);
+        $source = reset($explodedUniqueId);
 
         $user = $this->getUser();
 
@@ -148,6 +149,7 @@ trait HoldsTrait
                 if (isset($results['success']) && $results['success'] == true) {
                     $msg = [
                         'html' => true,
+                        'source' => $results['source'],
                         'msg' => 'hold_place_success_html',
                         'tokens' => [
                             '%%url%%' => $this->url()->fromRoute('myresearch-holds')

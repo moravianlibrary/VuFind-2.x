@@ -8,7 +8,7 @@
 
 <? endif; ?>
 
-        <div class="row well" vocab="http://schema.org/" resource="#record" typeof="<?=$this->driver->getSchemaOrgFormats()?> Product">
+        <div class="clearfix well" vocab="http://schema.org/" resource="#record" typeof="<?=$this->driver->getSchemaOrgFormats()?> Product">
           <? $QRCode = $this->record($this->driver)->getQRCode("core"); 
              $cover = $this->record($this->driver)->getCover('core', 'medium', $this->record($this->driver)->getThumbnail('large'));
              $preview = $this->record($this->driver)->getPreviews(); ?>
@@ -45,7 +45,7 @@
           <div class="col-sm-12">
           <? endif; ?>
         
-            <h3 property="name"><?=$this->escapeHtml($this->driver->getTitle())?></h3>
+            <h3 property="name"><strong><?=$this->escapeHtml($this->driver->getTitle())?></strong></h3>
         
             <? $summ = $this->driver->getSummary(); if (!empty($summ)): ?>
               <? foreach ($summ as $field): ?>
@@ -377,6 +377,16 @@
               </td>
             </tr>
           <? endif; ?>
+          
+          <? $nonStandardISBN = $this->driver->getNonStandardISBN(); if (! empty($nonStandardISBN)): ?>
+            <? $contentDisplayed = true; ?>
+            <tr>
+              <th><?=$this->transEsc('Non-standard ISBN')?>: </th>
+              <td>
+                  <?=$this->escapeHtml($nonStandardISBN[0])?>
+              </td>
+            </tr>
+          <? endif; ?>
         
           <? $issns = $this->driver->getISSNs(); if (!empty($issns)): ?>
             <? $contentDisplayed = true; ?>
@@ -459,18 +469,7 @@
               </td>
             </tr>
           <? endif; ?>
-          
-          <? if ($this->citation): ?>
-            <tr>
-              <th><?=$this->transEsc('Citation')?>: </th>
-              <td>
-                <iframe src="https://www.citacepro.com/api/cpk/citace/<?=$this->driver->getUniqueID()?>"
-                		frameborder="0" width="100%" height="90">
-                </iframe>
-              </td>
-            </tr>
-          <? endif; ?>
-        
+            
               <? $recordLinks = $this->driver->getAllRecordLinks(); ?>
               <? if(!empty($recordLinks)): ?>
                 <tr>
@@ -494,3 +493,8 @@
             <?/* End Main Details */?>
           </div>
         </div>
+        <script>
+        	jQuery( document ).ready(function( $ ){
+        		isCitationAvailable( '<?=$this->driver->getUniqueID()?>', displayCitation );
+        	})
+        </script>

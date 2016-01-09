@@ -643,14 +643,7 @@ placeOfPublication:
 
 counrtyOfPublication:
   QueryFields:
-    country_txt:
-      - [onephrase, 100] 
-      - [and, 50]
-      - [or, ~]
-
-cityInstitution:
-  QueryFields:
-    city_institution_cs_search_txt_mv:
+    country_str:
       - [onephrase, 100] 
       - [and, 50]
       - [or, ~]

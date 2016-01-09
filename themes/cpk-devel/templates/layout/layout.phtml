@@ -33,12 +33,23 @@
             'bulk_noitems_advice' => 'bulk_noitems_advice',
             'bulk_save_success' => 'bulk_save_success',
             'close' => 'close',
+            'go_to_list' => 'go_to_list',
+            'libphonenumber_invalid' => 'libphonenumber_invalid',
+            'libphonenumber_invalidcountry' => 'libphonenumber_invalidcountry',
+            'libphonenumber_invalidregion' => 'libphonenumber_invalidregion',
+            'libphonenumber_notanumber' => 'libphonenumber_notanumber',
+            'libphonenumber_toolong' => 'libphonenumber_toolong',
+            'libphonenumber_tooshort' => 'libphonenumber_tooshort',
+            'libphonenumber_tooshortidd' => 'libphonenumber_tooshortidd',
             'loading' => 'Loading',
             'sms_success' => 'sms_success',
             'number_thousands_separator' => ['number_thousands_separator', null, ','],
             'in_titles' => 'in_titles',
             'in_authors' => 'in_authors',
-            'in_subjects' => 'in_subjects'
+            'in_subjects' => 'in_subjects',
+            'citation_set_permanently' => 'citation_set_permanently',
+            'records_per_page_set_permanently' => 'records_per_page_set_permanently',
+            'default_sorting_set_permanently' => 'default_sorting_set_permanently'
           )
         );
         // Add libphonenumber.js strings
@@ -129,7 +140,32 @@
             $notificationsEnabled = $authManager->isNotificationSystemEnabled();     
 
             if ($notificationsEnabled) {
+                
                 $this->headScript()->appendFile("async-notifications.js");
+                
+                // Add notifications translations
+                $this->jsTranslations()->addStrings(
+                        array(
+                            'you_have_blocks' => 'notif_you_have_blocks',
+                            'you_have_fines' => 'notif_you_have_fines',
+                            'you_have_overdues' => 'notif_you_have_overdues'
+                        )
+                        );
+                
+                /* Also check if the user have just logged in - in order to let 
+                 * the __notif.sourcesRead know about it's state before last logout
+                 */
+
+                if(isSeT($_ENV['justLoggedIn'])) {
+                
+                    if ($_ENV['justLoggedIn'] === true) {
+                        $this->headScript()->appendScript('$(function(){'
+                                . '__notif.sourcesRead.init('
+                                . $user->read_notifications . ') })');
+                    }
+                
+                    unSeT($_ENV['justLoggedIn']);
+                }
             }
         }
         
@@ -145,14 +181,14 @@
             'isActiveShibbolethIdentityManager' => $isActiveShibbolethIdentityManager
         ];
     ?>
-
+    <?
+      $root = rtrim($this->url('home'), '/');
+      $translations = $this->jsTranslations()->getJSON();
+      $dsb = DEFAULT_SEARCH_BACKEND;
+      $setupJS = "var VuFind = new VuFindNamespace('{$root}', {$translations}, '{$dsb}');";
+      $this->headScript()->appendScript($setupJS);
+    ?>
     <?=$this->headScript()?>
-    <script>
-      var VuFind = new VuFindNamespace(
-        '<?=rtrim($this->url('home'), '/') ?>',
-        <?=$this->jsTranslations()->getJSON() ?>
-      );
-    </script>
   </head>
 <body
 	class="<?=$this->layoutClass('offcanvas-row')?><? if ($this->layout()->rtl): ?> rtl<? endif; ?>">

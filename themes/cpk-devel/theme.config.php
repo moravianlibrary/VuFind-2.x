@@ -1,6 +1,6 @@
 <?php
 return array(
-    'extends' => 'obalkyknih-api-v3-bootstrap3',
+    'extends' => 'common-bootstrap3', 
     'css' => array(
         //'vendor/bootstrap.min.css',
         //'vendor/bootstrap-accessibility.css',
@@ -17,6 +17,9 @@ return array(
         'vendor/bootstrap-accessibility.min.js',
         'vendor/rc4.js',
         'vendor/localforage.min.js',
+        'vendor/js.cookie.js',
+        'vendor/bootstrap-datepicker.js',
+        'vendor/bootstrap-datepicker.cs.js',
         'common.js',
         'lightbox.js',
         'eu-cookies.js',

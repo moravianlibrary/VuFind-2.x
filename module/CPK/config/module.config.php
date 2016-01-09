@@ -35,7 +35,9 @@ $config = array(
             ), /* auth */
             'db_table' => [
                 'factories' => [
-                    'user' => 'CPK\Db\Table\Factory::getUser'
+                    'user' => 'CPK\Db\Table\Factory::getUser',
+                    'citationstyle' => 'CPK\Db\Table\Factory::getCitationStyle',
+                    'usersettings' => 'CPK\Db\Table\Factory::getUserSettings'                                
                 ], /* factories */
                 'invokables' => [
                     'session' => 'VuFind\Db\Table\Session'
@@ -104,7 +106,8 @@ $config = array(
             'my-research' => 'CPK\Controller\MyResearchController',
             'librarycards' => 'CPK\Controller\LibraryCardsController',
             'search' => 'CPK\Controller\SearchController',
-            'ajax' => 'CPK\Controller\AjaxController'
+            'ajax' => 'CPK\Controller\AjaxController',
+            'status' => 'CPK\Controller\StatusController'
         ), /* invokables */
     ), /* controllers */
     'controller_plugins' => [
@@ -131,7 +134,8 @@ $staticRoutes = array(
     'Statistics/Circulations',
     'Statistics/Payments',
     'Statistics/Searches',
-    'MyResearch/UserConnect'
+    'MyResearch/UserConnect',
+    'MyResearch/Settings'
 );
 
 foreach ($staticRoutes as $route) {

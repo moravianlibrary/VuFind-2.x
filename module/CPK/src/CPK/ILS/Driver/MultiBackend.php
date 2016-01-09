@@ -28,7 +28,8 @@
  */
 namespace CPK\ILS\Driver;
 
-use VuFind\Exception\ILS as ILSException, Zend\ServiceManager\ServiceLocatorAwareInterface, Zend\ServiceManager\ServiceLocatorInterface, VuFind\ILS\Driver\MultiBackend as MultiBackendBase;
+use CPK;
+use VuFind\Exception\ILS as ILSException, Zend\ServiceManager\ServiceLocatorAwareInterface, Zend\ServiceManager\ServiceLocatorInterface, VuFind\ILS\Driver\MultiBackend as MultiBackendBase, CPK\ILS\Driver\SolrIdResolver as SolrIdResolver;
 
 /**
  * Multiple Backend Driver.
@@ -44,6 +45,32 @@ use VuFind\Exception\ILS as ILSException, Zend\ServiceManager\ServiceLocatorAwar
  */
 class MultiBackend extends MultiBackendBase
 {
+
+    /**
+     * Search service (used for lookups by barcode number)
+     *
+     */
+    protected $searchService = null;
+
+    /**
+     * Resolver for translation of bibliographic ids, used in a case
+     * of more bibliographic bases
+     *
+     * @var \VuFind\ILS\Driver\IdResolver
+     */
+    protected $idResolver = null;
+
+    public function __construct($configLoader, $ilsAuth, \VuFindSearch\Service $searchService = null) {
+        parent::__construct($configLoader, $ilsAuth);
+
+        $this->searchService = $searchService;
+    }
+
+    public function init() {
+        parent::init();
+
+        $this->idResolver = new SolrIdResolver($this->searchService, $this->config);
+    }
 
     /**
      * Cancel Holds
@@ -134,6 +161,31 @@ class MultiBackend extends MultiBackendBase
     }
 
     /**
+     * Get Patron Holds
+     *
+     * This is responsible for retrieving all holds by a specific patron.
+     *
+     * @param array $patron The patron array from patronLogin
+     *
+     * @return mixed      Array of the patron's holds
+     */
+    public function getMyHolds($patron)
+    {
+        $source = $this->getSource($patron['cat_username']);
+        $driver = $this->getDriver($source);
+        if ($driver) {
+            $holds = $driver->getMyHolds($this->stripIdPrefixes($patron, $source));
+
+            $this->idResolver->resolveIds( $holds, $source , $this->getDriverConfig($source));
+
+            return $this->addIdPrefixes(
+                    $holds, $source, ['id', 'item_id', 'cat_username']
+            );
+        }
+        throw new ILSException('No suitable backend driver found');
+    }
+
+    /**
      * Get Patron Transactions
      *
      * This is responsible for retrieving all transactions (i.e. checked out items)
@@ -152,12 +204,16 @@ class MultiBackend extends MultiBackendBase
                 $this->stripIdPrefixes($patron, $source)
             );
 
+            $this->idResolver->resolveIds( $transactions, $source , $this->getDriverConfig($source));
+
             foreach($transactions as &$transaction) {
+
                 if (isset($transaction['loan_id']) && strpos($transaction['loan_id'], '.') === false) {
                     // Prepend source to loan_id if not there already ..
                     $transaction['loan_id'] = $source . '.' . $transaction['loan_id'];
                 }
             }
+
             return $this->addIdPrefixes($transactions, $source);
         }
         throw new ILSException('No suitable backend driver found');
@@ -195,25 +251,33 @@ class MultiBackend extends MultiBackendBase
      *
      * @param array $ids
      *            The array of record ids to retrieve the status for
-     *
+     *            
      * @throws ILSException
      * @return array An array of getStatus() return values on success.
      */
-    public function getStatuses($ids)
+    public function getStatuses($ids, $bibId = null, $filter = [])
     {
-        // We assume all the ids passed here are being processed by only one ILS/Driver
-        $source = $this->getSource(reset($ids));
+            // We assume all the ids passed here are being processed by only one ILS/Driver
+        if ($bibId === null)
+            return $this->getEmptyStatuses($ids);
+        
+        $source = $this->getSource($bibId);
         $driver = $this->getDriver($source);
-
+        
         if ($driver === null)
             return $this->getEmptyStatuses($ids);
-
+        
         if ($driver instanceof XCNCIP2 || $driver instanceof Aleph) {
+            
             foreach ($ids as &$id) {
                 $id = $this->stripIdPrefixes($id, $source);
             }
-
-            $statuses = $driver->getStatuses($ids);
+            
+            $patron = $this->ilsAuth->storedCatalogLogin();
+            $patron = $this->stripIdPrefixes($patron, $source);
+            $bibId = $this->stripIdPrefixes($bibId, $source);
+            
+            $statuses = $driver->getStatuses($ids, $patron, $filter, $bibId);
             return $this->addIdPrefixes($statuses, $source);
         } else
             return parent::getStatuses($ids);

@@ -1,0 +1,107 @@
+/*
+  This file contains styling of notifications
+*/
+
+.notif-knihovny-logo{
+  font-size: 82px;
+  margin-top: -33px;
+  margin-right: 6px;
+  color: @brand-primary;
+}
+
+a#notif_icon > i {
+  cursor: pointer;
+}
+
+#notificationsList {
+  padding-bottom: 0;
+  width:400px;
+}
+
+.notification-institution {
+  margin: 5px 15px 0 15px;
+}
+
+.notif-default, .notif-info, .notif-danger, .notif-warning, .notif-success, .notif-header{
+  border-bottom: 1px solid;
+  border-bottom-color: lightgrey;
+  min-height: 30px;
+}
+
+.notif-header{
+  font-weight: bold;
+  margin-top: 10px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.notif-default, .notif-info, .notif-danger, .notif-warning, .notif-success {
+  padding-left: 7px;
+  cursor: pointer;
+  padding-top: 3px;
+
+  &:hover {
+    background-color: #dddddd;
+  }
+
+  &.notif-unread{
+    background-color: #eeeeee;
+    font-weight: bold;
+    &:hover {
+      background-color: #dddddd;
+    }
+  }
+
+}
+
+.notif-default:before, .notif-info:before, .notif-danger:before, .notif-warning:before, .notif-success:before {
+  display: inline-block;
+  font: normal normal normal 14px/1 FontAwesome;
+  font-size: inherit;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding-right: 5px;
+}
+
+.notif-default:before {
+  content: "\f111";
+}
+.notif-default {
+
+}
+
+.notif-info:before {
+  content: "\f05a";
+}
+.notif-info {
+
+}
+
+.notif-danger:before {
+  content: "\f071";
+}
+.notif-danger {
+
+}
+
+.notif-warning:before {
+  content: "\f071";
+}
+.notif-warning {
+
+}
+
+.notif-success:before {
+  content: "\f00c";
+}
+.notif-success {
+
+}
+
+.notificationWarning {
+  position: absolute;
+  right: 15px;
+  top: 9px;
+  color: red;
+}

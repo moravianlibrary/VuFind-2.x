@@ -212,7 +212,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         }
 
         if (! $result->isSuccess()) {
-            $message = 'HTTP error: ' . $result->getContent();
+            $message = 'HTTP error: ' . $result->getStatusCode();
 
             $this->addEnviromentalException($message);
             throw new ILSException($message);
@@ -233,7 +233,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         if ($problem = $this->getProblem($response)) {
             // TODO chcek problem type
 
-            $message = 'Problem recieved in XCNCIP2 Driver .. Content:' .
+            $message = 'Problem recieved in XCNCIP2 Driver. Content:' .
                  str_replace('\n', '<br/>', $problem);
 
             $this->addEnviromentalException($message);
@@ -586,11 +586,19 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
     {
         $patron = $holdDetails['patron'];
         list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
+        $status = true;
+        $message = '';
         $request = $this->requests->requestItem($patron, $holdDetails);
-        $response = $this->sendRequest($request);
+        try {
+            $response = $this->sendRequest($request);
+        } catch (ILSException $ex) {
+            $status = false;
+            $message = 'hold_error_fail';
+        }
         return array(
-            'success' => true,
-            'sysMessage' => ''
+            'success' => $status,
+            'sysMessage' => $message,
+            'source' => $patron['agency'],
         );
     }
 
@@ -707,8 +715,6 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             $itemRestriction = (string) $this->useXPath($response,
                 'LookupItemResponse/ItemOptionalFields/ItemUseRestrictionType')[0];
 
-            $available = $status === 'Available On Shelf';
-
             // TODO Exists any clean way to get the due date without additional request?
 
             if (! empty($locationInBuilding))
@@ -731,7 +737,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
             return array(
                 'id' => empty($id) ? "" : $id,
-                'availability' => empty($available) ? false : $available ? true : false,
+                'availability' => empty($itemRestriction) ? "" : $itemRestriction,
                 'status' => empty($status) ? "" : $status,
                 'location' => empty($locationInBuilding) ? "" : $locationInBuilding,
                 'sub_lib_desc' => empty($sublibrary) ? '' : $sublibrary,
@@ -758,7 +764,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      * @throws ILSException
      * @return array Array of return values from getStatus.
      */
-    public function getStatuses($ids)
+    public function getStatuses($ids, $patron = [], $filter = [])
     {
         $retVal = [];
 
@@ -766,7 +772,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             // If we cannot use LUIS we will parse only the first one
             $retVal[] = $this->getStatus(reset($ids));
         else {
-            $request = $this->requests->LUISItemId($ids, null, $this);
+            $request = $this->requests->LUISItemId($ids, null, $this, $patron);
             $response = $this->sendRequest($request);
 
             if ($response === null)
@@ -835,8 +841,6 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                         }
                 }
 
-                $available = $status === 'Available On Shelf'; // Is this useful?
-
                 $label = $this->determineLabel($status);
 
                 $retVal[] = array(
@@ -899,12 +903,12 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 $request = $this->requests->LUISBibItem(
                     array(
                         $id
-                    ), (string) $nextItemToken[0], $this);
+                    ), (string) $nextItemToken[0], $this, $patron);
             else {
                 $request = $this->requests->LUISBibItem(
                     array(
                         $id
-                    ), null, $this);
+                    ), null, $this, $patron);
                 $all_iteminfo = [];
             }
 
@@ -1036,6 +1040,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
             $dateDue = $this->useXPath($current, 'DateDue');
             $parsedDate = strtotime((string) $dateDue[0]);
+            $renewalNotPermitted = $this->useXPath($current, 'Ext/RenewalNotPermitted');
+            $renewable = empty($renewalNotPermitted)? true : false;
             $additRequest = $this->requests->lookupItem($item_id, $patron['agency']);
             $additResponse = $this->sendRequest($additRequest);
             $isbn = $this->useXPath($additResponse,
@@ -1057,14 +1063,14 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'cat_username' => $patron['cat_username'],
                 'duedate' => empty($dateDue) ? '' : $dateDue,
                 'id' => $bib_id,
-                'barcode' => '', // TODO
-                                 // 'renew' => '',
-                                 // 'renewLimit' => '',
+                'barcode' => $item_id,
+                                 // 'renew' => '', // TODO
+                                 // 'renewLimit' => '', // TODO
                 'request' => empty($request) ? '' : (string) $request[0],
                 'volume' => '',
                 'author' => empty($author) ? '' : (string) $author[0],
                 'publication_year' => '', // TODO
-                'renewable' => empty($request) ? false : true,
+                'renewable' => $renewable,
                 'message' => '',
                 'title' => empty($title) ? '' : (string) $title[0],
                 'item_id' => $item_id,
@@ -1099,6 +1105,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
         $list = $this->useXPath($response,
             'LookupUserResponse/UserFiscalAccount/AccountDetails');
+        $monetaryValue = $this->useXPath($response,
+            'LookupUserResponse/UserFiscalAccount/AccountBalance/MonetaryValue');
 
         $fines = array();
         foreach ($list as $current) {
@@ -1124,6 +1132,10 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'id' => (string) $type[0]
             );
         }
+        if (empty($fines) && ! empty($monetaryValue)) $fines[] = array(
+                'amount' => (string) $monetaryValue[0],
+                'balance' => (string) $monetaryValue[0]
+            );
         return $fines;
     }
 
@@ -1178,6 +1190,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'position' => empty($position) ? '' : (string) $position[0],
                 'available' => false, // true means item is ready for check out
                 'item_id' => empty($item_id) ? '' : (string) $item_id[0],
+                'barcode' => empty($item_id) ? '' : (string) $item_id[0],
                 'volume' => '',
                 'publication_year' => '',
                 'title' => empty($title) ? '' : (string) $title[0],
@@ -1252,22 +1265,30 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
         foreach ($blocksParsed as $block) {
             if (! empty($logo)) {
-                $blocks[$logo] = (string) $block;
+                if (! empty($blocks[$logo]))
+                    $blocks[$logo] .= ", " . (string) $block;
+                else
+                    $blocks[$logo] = (string) $block;
             } else
                 $blocks[] = (string) $block;
         }
 
         if (empty($name) && empty($surname)) {
             $name = $this->useXPath($response,
-                    'LookupUserResponse/UserOptionalFields/NameInformation/PersonalNameInformation/UnstructuredPersonalUserName');
+                'LookupUserResponse/UserOptionalFields/NameInformation/PersonalNameInformation/UnstructuredPersonalUserName');
         }
         if (empty($address1)) {
             $address1 = $this->useXPath($response,
-            'LookupUserResponse/UserOptionalFields/UserAddressInformation/PhysicalAddress/StructuredAddress/Line1');
+                'LookupUserResponse/UserOptionalFields/UserAddressInformation/PhysicalAddress/StructuredAddress/Line1');
         }
         if (empty($city)) {
             $city = $this->useXPath($response,
-            'LookupUserResponse/UserOptionalFields/UserAddressInformation/PhysicalAddress/StructuredAddress/Line2');
+                'LookupUserResponse/UserOptionalFields/UserAddressInformation/PhysicalAddress/StructuredAddress/Line2');
+        }
+        if (empty($address1)) {
+            $address1 = $this->useXPath($response,
+                'LookupUserResponse/UserOptionalFields/UserAddressInformation/PhysicalAddress/' .
+                'UnstructuredAddress/UnstructuredAddressData');
         }
 
         $patron = array(

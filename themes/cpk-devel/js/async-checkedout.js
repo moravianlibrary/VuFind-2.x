@@ -4,7 +4,15 @@ $(function() { // Onload DOM ..
 
 	fetchTransactions(cat_username);
     })
+    goToAnchorIfAny();
 });
+
+function goToAnchorIfAny() {
+    var hasAnchor = window.location.href.match(/CheckedOut[/]?#[a-z]+$/);
+    if (hasAnchor !== null) {
+	window.location = window.location.href;
+    }
+}
 
 function fetchTransactions(cat_username) {
     $.ajax({
@@ -18,11 +26,18 @@ function fetchTransactions(cat_username) {
 	},
 	success : function(response) {
 	    updateTransactions(response);
+	    goToAnchorIfAny();
 	}
     })
 }
 
 function updateTransactions(response) {
+
+    // Update notifications not to let those fetch the blocks again ;)
+    if (__notif !== undefined && __notif.overdues !== undefined) {
+	__notif.helper.processResponseAsynchronously(__notif.overdues, response);
+    }
+    
     var data = response.data, status = response.status;
 
     var cat_username = data.cat_username, html = data.html, overdue = data.overdue;

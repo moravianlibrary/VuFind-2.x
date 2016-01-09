@@ -1,17 +1,20 @@
 /*global btoa, console, hexEncode, isPhoneNumberValid, Lightbox, rc4Encrypt, unescape, VuFind */
 
-function VuFindNamespace(p, s) {
+function VuFindNamespace(p, s, dsb) {
+  var defaultSearchBackend = dsb;
   var path = p;
   var strings = s;
 
-  var getPath = function() { return path; }
-  var translate = function(op) { return strings[op]; }
+  var getDefaultSearchBackend = function() { return defaultSearchBackend; };
+  var getPath = function() { return path; };
+  var translate = function(op) { return strings[op] || op; };
 
   return {
+    getDefaultSearchBackend: getDefaultSearchBackend,
     getPath: getPath,
     translate: translate
   };
-};
+}
 
 /* --- GLOBAL FUNCTIONS --- */
 function htmlEncode(value) {
@@ -184,7 +187,7 @@ function newAccountHandler(html) {
     Lightbox.getByUrl(Lightbox.openingURL);
     Lightbox.openingURL = false;
   }
-  return valid == true;
+  return false;
 }
 
 // This is a full handler for the login form
@@ -301,7 +304,7 @@ function setupAutocomplete() {
   // Search autocomplete
   $('.autocomplete').each(function(i, op) {
     $(op).autocomplete({
-      maxResults: 6,
+      maxResults: 10,
       loadingString: VuFind.translate('loading')+'...',
       handler: function(query, cb) {
         var searcher = extractClassParams(op);
@@ -315,13 +318,13 @@ function setupAutocomplete() {
           },
           dataType:'json',
           success: function(json) {
-            if (json.status == 'OK' 
-            	&& (json.data.byAuthor.length > 0 
-            		|| json.data.byTitle.length > 0 
-            		|| json.data.bySubject.length > 0
-            	)
-            ) {
-              cb(json.data);
+        	  if (json.status == 'OK' && json.data.length > 0) {
+                var datums = [];
+                for (var i=0;i<json.data.length;i++) {
+                  datums.push(json.data[i]);
+                }
+        		cb(datums);
+        		
             } else {
               cb([]);
             }
@@ -333,6 +336,7 @@ function setupAutocomplete() {
   // Update autocomplete on type change
   $('.searchForm_type').change(function() {
     var $lookfor = $(this).closest('.searchForm').find('.searchForm_lookfor[name]');
+    $lookfor.autocomplete('clear cache');
     $lookfor.focus();
   });
 }
@@ -346,7 +350,7 @@ function keyboardShortcuts() {
     if ($('.pager').length > 0) {
         $(window).keydown(function(e) {
           if (!$searchform.is(':focus')) {
-            $target = null;
+            var $target = null;
             switch (e.keyCode) {
               case 37: // left arrow key
                 $target = $('.pager').find('a.previous');

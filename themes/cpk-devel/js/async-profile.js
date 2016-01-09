@@ -4,7 +4,16 @@ $(function() { // Onload DOM ..
 
 	fetchProfile(cat_username);
     })
+    
+    goToAnchorIfAny();
 });
+
+function goToAnchorIfAny() {
+    var hasAnchor = window.location.href.match(/Profile[/]?#[a-z]+$/);
+    if (hasAnchor !== null) {
+	window.location = window.location.href;
+    }
+}
 
 function fetchProfile(cat_username) {
     $.ajax({
@@ -18,11 +27,18 @@ function fetchProfile(cat_username) {
 	},
 	success : function(response) {
 	    updateProfileTable(response);
+	    goToAnchorIfAny();
 	}
     })
 }
 
 function updateProfileTable(response) {
+
+    // Update notifications not to let those fetch the blocks again ;)
+    if (__notif !== undefined && __notif.blocks !== undefined) {
+	__notif.helper.processResponseAsynchronously(__notif.blocks, response);
+    }
+    
     var patron = response.data, status = response.status;
 
     var cat_username = patron.cat_username, parentTable = {};
@@ -50,24 +66,13 @@ function updateProfileTable(response) {
 		    }
 		} else {
 		    if (key == 'blocks' && typeof val == 'object') {
-			var heading = $('h2');
-			
+
 			$.each(val, function(logoUrl, blockMessage) {
 			    
-			    // Create logo image
-			    var logo = $("<img>").attr('height', '32').attr('src', logoUrl);
-			    
 			    // Create division to put the logo & the message into
-			    var errorMessage = $("<div>").addClass('alert alert-danger').text(blockMessage).prepend(logo);
+			    var errorMessage = $("<div>").addClass('block-alert').text(blockMessage);
 			    
-			    heading.after(errorMessage);
-			    
-			    // Update notifications not to let those fetch the blocks again ;)
-			    if (typeof __notif != "undefined") {
-				var institution = cat_username.split('.')[0];
-				__notif.addNotification(blockMessage, 'warning', institution);
-				// FIXME Implement updating the browser localforage ..
-			    }
+			    parentTable.before(errorMessage);
 			})
 		    }
 		}

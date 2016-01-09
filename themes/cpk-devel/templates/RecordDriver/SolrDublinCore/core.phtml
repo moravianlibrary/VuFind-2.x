@@ -33,7 +33,7 @@
   </div>
 
   <div class="col-sm-9">
-    <h3 property="name"><?=$this->escapeHtml($this->driver->getTitle())?></h3>
+    <h3 property="name"><strong><?=$this->escapeHtml($this->driver->getTitle())?></strong></h3>
 
     <? $summary = $this->driver->getSummary(); $summary = isset($summary[0]) ? $this->escapeHtml($summary[0]) : false; ?>
     <? if ($summary): ?>
@@ -433,6 +433,16 @@
       </td>
     </tr>
   <? endif; ?>
+  
+  <? $nonStandardISBN = $this->driver->getNonStandardISBN(); if (! empty($nonStandardISBN)): ?>
+    <? $contentDisplayed = true; ?>
+    <tr>
+      <th><?=$this->transEsc('Non-standard ISBN')?>: </th>
+      <td>
+          <?=$this->escapeHtml($nonStandardISBN[0])?>
+      </td>
+    </tr>
+  <? endif; ?>
 
   <? $issns = $this->driver->getISSNs(); if (!empty($issns)): ?>
     <? $contentDisplayed = true; ?>
@@ -515,17 +525,6 @@
       </td>
     </tr>
   <? endif; ?>
-  
-  		<? if ($this->citation): ?>
-            <tr>
-              <th><?=$this->transEsc('Citation')?>: </th>
-              <td>
-                <iframe src="https://www.citacepro.com/api/cpk/citace/<?=$this->driver->getUniqueID()?>"
-                		frameborder="0" width="100%" height="90">
-                </iframe>
-              </td>
-            </tr>
-          <? endif; ?>
 
       <? $recordLinks = $this->driver->getAllRecordLinks(); ?>
       <? if(!empty($recordLinks)): ?>
@@ -551,3 +550,8 @@
   </div>
 </div>
 </div>
+<script>
+	jQuery( document ).ready(function( $ ){
+		isCitationAvailable( '<?=$this->driver->getUniqueID()?>', displayCitation );
+	})
+</script>

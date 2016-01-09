@@ -4,40 +4,134 @@
  * To make this JS work, you have to include async-holdingsils.js too ...
  * 
  */
-var filterTypes = [ 'year', 'volume' ];
+var holdingsILSfilters = {
 
-$(function() { // Append these eventListeners after DOM loaded ..
-    filterTypes.forEach(function(filterType) {
-	$("#" + filterType + "_filter").on('change', function() {
-	    filterSelected(filterType, this.value);
-	});
-    });
-});
+    activeFilter : undefined,
 
-function filterSelected(filter, value) {
+    filterTypes : [ 'year', 'volume' ],
 
-    // This cycle basically selects the first option within all remaining
-    // (nonselected) selects
-    filterTypes.forEach(function(filterType) {
-	if (filterType !== filter) {
-	    $('select#' + filterType + '_filter').children().first().prop(
-		    'selected', true);
+    selectors : {
+	filters : {},
+	tbody : null
+    },
+
+    initialized : false,
+
+    init : function() {
+	if (holdingsILSfilters.initialized === false) {
+
+	    // Initialize table body selector for faster row resolving
+	    var tbodySelector = 'div#holdings-tab table tbody';
+	    holdingsILSfilters.selectors.tbody = $(tbodySelector);
+
+	    holdingsILSfilters.filterTypes.forEach(function(filterType) {
+
+		// Initialize the selector for current filter
+		holdingsILSfilters.selectors.filters[filterType] = holdingsILSfilters.selectors.tbody.siblings('caption').find(
+			"select#" + filterType + "_filter");
+
+		// Append onChange eventListener to all filter selects
+		function onChangeEvent() {
+		    holdingsILSfilters.filterSelected(filterType, this.value);
+		}
+
+		holdingsILSfilters.selectors.filters[filterType].on('change', onChangeEvent);
+	    });
+
+	    // now detect which filter is active
+	    holdingsILSfilters.updateActiveFilter();
+
+	    holdingsILSfilters.initialized = true;
 	}
-    });
+    },
 
-    var selector = 'tr[data-type=holding][hidden=hidden]';
+    filterSelected : function(filter, value) {
 
-    if (value !== 'ALL') {
+	// This cycle basically selects the first option within all
+	// remaining (nonselected) selects
+	holdingsILSfilters.filterTypes.forEach(function(filterType) {
+	    if (filterType !== filter) {
 
-	// Hide rows not matching the filter selection
-	$('tr[data-type=holding]:not([hidden=hidden]').attr('hidden', 'hidden');
+		var firstOption = holdingsILSfilters.selectors.filters[filterType].children().first();
+		firstOption.prop('selected', true);
+	    }
+	});
 
-	selector += '[data-' + filter + '=' + value + ']';
-    }
+	var selector = 'tr.hidden';
 
-    // Now unhide rows matching selected filters
-    $(selector).removeAttr('hidden');
+	if (value !== 'ALL') {
 
-    // And now query the status of the unhidden
-    getHoldingStatuses();
-}
+	    // Update activeFilter
+	    holdingsILSfilters.activeFilter = {};
+	    holdingsILSfilters.activeFilter[filter] = value;
+
+	    // Hide rows not matching the filter selection
+	    // Note that we have to use class hidden due to mobile compatibility
+	    holdingsILSfilters.selectors.tbody.children('tr:not(.hidden)').addClass('hidden');
+
+	    selector += '[data-' + filter + '=' + value + ']';
+	} else {
+	    // no filter selected now ..
+	    holdingsILSfilters.activeFilter = undefined;
+	}
+
+	// Now unhide rows matching selected filters
+	holdingsILSfilters.selectors.tbody.children(selector).removeClass('hidden');
+
+	// And now query the status of the unhidden
+	holdingsILS.getHoldingStatuses();
+    },
+
+    /**
+     * Updates the holdingsILSfilters.activeFilter variable to an object where
+     * key is the filter name & value is it's value or sets to undefined if no
+     * filter is active
+     * 
+     * @param filterType
+     *                (optional, defaults to true)
+     */
+    updateActiveFilter : function(filterType) {
+
+	var foundAnything = false;
+
+	var filterTypesLength = holdingsILSfilters.filterTypes.length;
+
+	for (var i = 0; i < filterTypesLength; ++i) {
+
+	    var filterType = holdingsILSfilters.filterTypes[i];
+
+	    var filter = holdingsILSfilters.selectors.filters[filterType];
+
+	    var selected = filter.children('[selected]');
+	    var hasAnythingSelected = selected.length !== 0;
+
+	    if (hasAnythingSelected) {
+
+		var isFirstSelected = typeof holdingsILSfilters.selectors.filters[filterType].children().first().attr('selected') !== 'undefined';
+
+		if (!isFirstSelected) {
+		    // Yup, there is something selected & it is not the
+		    // first
+		    // option -> thus it is active
+
+		    var value = selected.first().val();
+
+		    holdingsILSfilters.activeFilter = {};
+		    holdingsILSfilters.activeFilter[filterType] = value;
+
+		    foundAnything = true;
+		    break;
+		}
+	    }
+
+	}
+
+	if (foundAnything === false) {
+	    // No filter is active -> undefine holdingsILSfilters.activeFilter
+	    holdingsILSfilters.activeFilter = undefined;
+	}
+    },
+};
+
+// Call init on DOM load
+$(holdingsILSfilters.init);

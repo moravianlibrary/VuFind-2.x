@@ -161,39 +161,49 @@ class AjaxController extends AjaxControllerBase
     {
         $request = $this->getRequest();
         $ids = $this->params()->fromPost('ids');
+        $bibId = $this->params()->fromPost('bibId');
+        $filter = $this->params()->fromPost('activeFilter');
 
         $viewRend = $this->getViewRenderer();
 
-        $ids = array_filter($ids);
-        if (empty($ids))
+        if ($ids === null || ! is_array($ids) || empty($ids)) {
             return $this->output(
                 [
                     'status' => $this->getTranslatedUnknownStatus($viewRend)
                 ], self::STATUS_ERROR);
+        } elseif ($bibId === null) {
+            return $this->output([
+                'statuses' => $this->getTranslatedUnknownStatuses($ids, $viewRend),
+                'msg' => 'No bibId provided !'
+            ], self::STATUS_ERROR);
+        }
+        
+        $ids = array_filter($ids);
 
         $ilsDriver = $this->getILS()->getDriver();
 
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
 
             try {
-                $statuses = $ilsDriver->getStatuses($ids);
+                $statuses = $ilsDriver->getStatuses($ids, $bibId, $filter);
             } catch (\Exception $e) {
-                return $this->output(
-                    [
-                        'status' => $this->getTranslatedUnknownStatus($viewRend),
-                        'message' => $e->getMessage(),
-                        'code' => $e->getCode()
-                    ], self::STATUS_ERROR);
+                return $this->output([
+                    'statuses' => $this->getTranslatedUnknownStatuses($ids, $viewRend),
+                    'msg' => $e->getMessage(),
+                    'code' => $e->getCode()
+                ], self::STATUS_ERROR);
             }
 
             if (null === $statuses || empty($statuses))
-                return $this->output('$ilsDriver->getStatuses returned nothing',
-                    self::STATUS_ERROR);
+                return $this->output([
+                    'statuses' => $this->getTranslatedUnknownStatuses($ids, $viewRend),
+                    'msg' => '$ilsDriver->getStatuses returned nothing'
+                ], self::STATUS_ERROR);
 
             $itemsStatuses = [];
 
             foreach ($statuses as $status) {
-                $id = $status['id'];
+                $id = $status['item_id'];
 
                 $itemsStatuses[$id] = [];
 
@@ -202,23 +212,26 @@ class AjaxController extends AjaxControllerBase
                         'status_' . $status['status'], null, $status['status']);
                 else {
                     // The status is empty - set label to 'label-danger'
-                    $itemsStatuses[$id]['label'] = 'label-danger';
+                    $itemsStatuses[$id]['label'] = 'label-unknown';
 
                     // And set the status to unknown status
                     $itemsStatuses[$id]['status'] = $this->getTranslatedUnknownStatus(
                         $viewRend);
                 }
 
-                if (! empty($status['due_date']))
-                    $itemsStatuses[$id]['due_date'] = $status['due_date'];
+                if (! empty($status['duedate']))
+                    $itemsStatuses[$id]['duedate'] = $status['duedate'];
 
-                if (! empty($status['hold_type']))
-                    $itemsStatuses[$id]['hold_type'] = $viewRend->transEsc(
-                        $status['hold_type']);
+                if (! empty($status['holdtype']))
+                    $itemsStatuses[$id]['holdtype'] = $viewRend->transEsc(
+                        $status['holdtype']);
 
                 if (! empty($status['label']))
                     $itemsStatuses[$id]['label'] = $status['label'];
-
+                
+                if (! empty($status['addLink']))
+                    $itemsStatuses[$id]['addLink'] = $status['addLink'];
+                    
                 if (! empty($status['availability']))
                     $itemsStatuses[$id]['availability'] = $status['availability'];
 
@@ -234,9 +247,10 @@ class AjaxController extends AjaxControllerBase
             $retVal['statuses'] = $itemsStatuses;
             return $this->output($retVal, self::STATUS_OK);
         } else
-            return $this->output(
-                "ILS Driver isn't instanceof MultiBackend - ending job now.",
-                self::STATUS_ERROR);
+            return $this->output([
+                'statuses' => $this->getTranslatedUnknownStatuses($ids, $viewRend),
+                'msg' => "ILS Driver isn't instanceof MultiBackend - ending job now."
+            ], self::STATUS_ERROR);
     }
 
     /**
@@ -266,77 +280,6 @@ class AjaxController extends AjaxControllerBase
 
         // Done
         return $this->output($vars, self::STATUS_OK);
-    }
-
-    public function getMyBlocksAjax()
-    {
-        // Get the cat_username being requested
-        $cat_username = $this->params()->fromPost('cat_username');
-
-        $hasPermissions = $this->hasPermissions($cat_username);
-
-        if ($hasPermissions instanceof \Zend\Http\Response)
-            return $hasPermissions;
-
-            $renderer = $this->getViewRenderer();
-
-            // Do we have this feature enabled ??
-            $config = $this->getConfig();
-            $isThisEnabled = $config->Site['notificationsEnabled'] !== null &&
-            $config->Site['notificationsEnabled'];
-
-            if (! $isThisEnabled) {
-                return $this->output(
-                        [
-                            'cat_username' => $cat_username,
-                            'message' => 'Notifications are disabled by the system administrator'
-                        ], self::STATUS_ERROR);
-            }
-
-            $ilsDriver = $this->getILS()->getDriver();
-
-            if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
-
-                $patron = [
-                    'cat_username' => $cat_username,
-                    'id' => $cat_username
-                ];
-
-                try {
-                    // Try to get the profile ..
-                    $profile = $ilsDriver->getMyProfile($patron);
-
-                    $blocks = [];
-
-                    if ($profile['blocks'] !== null) {
-                        $blocks = $profile['blocks'];
-                    }
-
-                    $source = explode('.', $cat_username)[0];
-
-                    $data = [
-                        'source' => $source,
-                        'count' => count($blocks),
-                        'blocks' => $blocks
-                    ];
-
-                    $haveBlocks = is_array($blocks) && count($blocks) > 0;
-                    if (! $haveBlocks) {
-                        $message = $renderer->transEsc( 'no_blocks_found' );
-                        $data['message'] = $message;
-                    }
-
-                } catch (\VuFind\Exception\ILS $e) {
-                    return $this->outputException($e, $cat_username);
-                }
-
-                return $this->output($data, self::STATUS_OK);
-            } else
-                return $this->output(
-                        [
-                            'cat_username' => $cat_username,
-                            'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
-                        ], self::STATUS_ERROR);
     }
 
     public function getMyProfileAjax()
@@ -514,6 +457,8 @@ class AjaxController extends AjaxControllerBase
 
                 $data['cat_username'] = $cat_username;
                 $data['fines'] = $fines;
+                $data['source'] = $fines['source'];
+                
             } catch (\VuFind\Exception\ILS $e) {
                 return $this->outputException($e, $cat_username);
             }
@@ -540,8 +485,10 @@ class AjaxController extends AjaxControllerBase
             return $hasPermissions;
 
         $renderer = $this->getViewRenderer();
+        
+        $catalog = $this->getILS();
 
-        $ilsDriver = $this->getILS()->getDriver();
+        $ilsDriver = $catalog->getDriver();
 
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
 
@@ -556,12 +503,18 @@ class AjaxController extends AjaxControllerBase
             } catch (\VuFind\Exception\ILS $e) {
                 return $this->outputException($e, $cat_username);
             }
+            
+            $renewStatus = $catalog->checkFunction('Renewals', compact('patron'));
 
             $obalky = $transactions = [];
 
             $canRenew = $showOverdueMessage = false;
 
+            $i = 0;
+
             foreach ($result as $current) {
+
+                $i++;
 
                 $current = $this->renewals()->addRenewDetails($catalog, $current,
                     $renewStatus);
@@ -575,7 +528,7 @@ class AjaxController extends AjaxControllerBase
                 $resource = $this->getDriverForILSRecord($current);
 
                 // We need to let JS know what to opt for ...
-                $recordId = $resource->getUniqueId();
+                $recordId = $resource->getUniqueId() . $i; //adding order to id (as suffix) to be able to show more covers with same id
                 $bibInfo = $renderer->record($resource)->getObalkyKnihJSONV3();
 
                 if ($bibInfo) {
@@ -606,13 +559,16 @@ class AjaxController extends AjaxControllerBase
                     'libraryIdentity' => compact('transactions'),
                     'AJAX' => true
                 ]);
+            
+            $splitted_cat_username = explode('.', $cat_username);
 
             $toRet = [
                 'html' => $html,
                 'obalky' => $obalky,
                 'canRenew' => $canRenew,
                 'overdue' => $showOverdueMessage,
-                'cat_username' => str_replace('.', '\.', $cat_username)
+                'cat_username' => join('\.', $splitted_cat_username),
+                'source' => $splitted_cat_username[0]
             ];
 
             return $this->output($toRet, self::STATUS_OK);
@@ -623,6 +579,84 @@ class AjaxController extends AjaxControllerBase
                     'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
                 ],
                 self::STATUS_ERROR);
+    }
+    
+    public function haveAnyOverdueAjax()
+    {
+            // Get the cat_username being requested
+        $cat_username = $this->params()->fromPost( 'cat_username' );
+        
+        $hasPermissions = $this->hasPermissions( $cat_username );
+        
+        if ($hasPermissions instanceof \Zend\Http\Response)
+            return $hasPermissions;
+                
+        $ilsDriver = $this->getILS()->getDriver();
+        
+        if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
+            
+            $patron = [
+                'cat_username' => $cat_username,
+                'id' => $cat_username
+            ];
+            
+            try {
+                // Try to get the profile ..
+                $result = $ilsDriver->getMyTransactions( $patron );
+            } catch ( \VuFind\Exception\ILS $e ) {
+                return $this->outputException( $e, $cat_username );
+            }
+            
+            $showOverdueMessage = false;
+            
+            foreach ( $result as $current ) {
+                
+                $ilsDetails = $this->getDriverForILSRecord( $current )->getExtraDetail( 'ils_details' );
+                
+                if (isset( $ilsDetails['dueStatus'] ) && $ilsDetails['dueStatus'] == "overdue") {
+                    $showOverdueMessage = true;
+                    break;
+                }
+            }
+            
+            $source = explode( '.', $cat_username )[0];
+            
+            $toRet = [
+                'overdue' => $showOverdueMessage,
+                'source' => $source
+            ];
+            
+            return $this->output( $toRet, self::STATUS_OK );
+        } else
+            return $this->output( 
+                    [
+                        'source' => $source,
+                        'cat_username' => $cat_username,
+                        'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
+                    ], self::STATUS_ERROR );
+    }
+    
+    public function updateNotificationsReadAjax()
+    {
+            // Check user is logged in ..
+        if (!$user = $this->getAuthManager()->isLoggedIn()) {
+            return $this->output( 'You are not logged in.', self::STATUS_ERROR );
+        }
+        
+        $currentNotificationsRead = $this->params()->fromPost( 'curr_notifies_read' );
+        
+        $encodedReadNotifications = json_encode( $currentNotificationsRead );
+        
+        if (strlen( $encodedReadNotifications ) > 512) {
+            return $this->output( 
+                    $this->translate( 'JSON you want to store is longer than 512 chars!!' ), self::STATUS_ERROR );
+        }
+        
+        // Just overwrite with current read notifications
+        $user->read_notifications = $encodedReadNotifications;
+        $user->save();
+        
+        return $this->output( "OK", self::STATUS_OK );
     }
 
     /**
@@ -660,7 +694,7 @@ class AjaxController extends AjaxControllerBase
         $client->setParameterGet(
             array(
                 'book_id' => $bookid,
-                'id' => $id
+                'id' => $id  //required parameter, later can be used for editing and deleting
             ));
         $client->setParameterPost(
             array(
@@ -766,6 +800,17 @@ class AjaxController extends AjaxControllerBase
             ]);
         return $this->output($html, self::STATUS_OK);
     }
+    
+    protected function getTranslatedUnknownStatuses($ids, $viewRend) {
+        $statuses = [];
+        foreach($ids as $id) {
+            $statuses[$id] = [
+                'status' => $this->getTranslatedUnknownStatus($viewRend),
+                'label' => 'label-unknown'
+            ];
+        }
+        return $statuses;
+    }
 
     protected function getTranslatedUnknownStatus($viewRend)
     {
@@ -815,7 +860,7 @@ class AjaxController extends AjaxControllerBase
                 self::STATUS_ERROR);
         }
 
-        return true;
+        return $user;
     }
 
     /**
@@ -941,5 +986,118 @@ class AjaxController extends AjaxControllerBase
         return $this->output(
             $autocompleteManager->getSuggestions($query), self::STATUS_OK
         );
+    }
+    
+    /**
+     * Is citation available
+     *
+     * @return \Zend\Http\Response
+     */
+    public function isCitationAvailableAjax()
+    {
+        $recordId = $this->params()->fromPost('recordId');
+        
+        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+        $recordDriver = $recordLoader->load($recordId);
+        
+        $parentRecordId = $recordDriver->getParentRecordId();
+        $parentRecordDriver = $recordLoader->load($parentRecordId);
+        
+        $format = $parentRecordDriver->getRecordType();
+        if ($format === 'marc')
+            $format .= '21';
+        $recordXml = $parentRecordDriver->getXml($format);
+        
+        if (strpos($recordXml, "datafield") === false)
+            return $this->output($statusCode, self::STATUS_ERROR);
+        
+        $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
+            .$recordId;
+    
+        $statusCode = get_headers($citationServerUrl)[0];
+
+        if ($statusCode === 'HTTP/1.1 200 OK')
+            return $this->output($statusCode, self::STATUS_OK);
+        
+        return $this->output($statusCode, self::STATUS_ERROR);
+    }
+    
+    /**
+     * Set preferred citation style into user_settings table
+     *
+     * @return \Zend\Http\Response
+     */
+    public function setCitationStyleAjax()
+    {
+        // Stop now if the user does not have valid catalog credentials available:
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $this->flashExceptions($this->flashMessenger());
+            return $this->forceLogin();
+        }
+        
+        $citationStyleValue = $this->params()->fromPost('citationStyleValue');
+        
+        try {
+            $userSettingsTable = $this->getTable("usersettings");
+            $userSettingsTable->setCitationStyle($user, $citationStyleValue);
+        } catch (\Exception $e) {
+            return $this->outputException($e);
+        }
+
+        return $this->output([], self::STATUS_OK);
+    }
+    
+    /**
+     * Set preferred amount of records per page user_settings table
+     *
+     * @return \Zend\Http\Response
+     */
+    public function setRecordsPerPageAjax()
+    {
+        // Stop now if the user does not have valid catalog credentials available:
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $this->flashExceptions($this->flashMessenger());
+            return $this->forceLogin();
+        }
+    
+        $recordsPerPage = $this->params()->fromPost('recordsPerPage');
+    
+        try {
+            $userSettingsTable = $this->getTable("usersettings");
+            $userSettingsTable->setRecordsPerPage($user, $recordsPerPage);
+            // @FIXME Make following line object oriented
+            $_SESSION['VuFind\Search\Solr\Options']['lastLimit'] = $recordsPerPage;
+        } catch (\Exception $e) {
+            return $this->outputException($e);
+        }
+    
+        return $this->output([], self::STATUS_OK);
+    }
+    
+    /**
+     * Set preferred sorting for user to user_settings table
+     *
+     * @return \Zend\Http\Response
+     */
+    public function setPreferredSortingAjax()
+    {
+        // Stop now if the user does not have valid catalog credentials available:
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $this->flashExceptions($this->flashMessenger());
+            return $this->forceLogin();
+        }
+    
+        $preferredSorting = $this->params()->fromPost('preferredSorting');
+    
+        try {
+            $userSettingsTable = $this->getTable("usersettings");
+            $userSettingsTable->setPreferredSorting($user, $preferredSorting);
+            // @FIXME Make following line object oriented
+            $_SESSION['VuFind\Search\Solr\Options']['lastSort'] = $preferredSorting;
+        } catch (\Exception $e) {
+            return $this->outputException($e);
+        }
+    
+        return $this->output([], self::STATUS_OK);
     }
 }
