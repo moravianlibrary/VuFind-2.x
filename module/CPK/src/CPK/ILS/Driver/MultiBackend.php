@@ -29,7 +29,7 @@
 namespace CPK\ILS\Driver;
 
 use CPK;
-use VuFind\Exception\ILS as ILSException, Zend\ServiceManager\ServiceLocatorAwareInterface, Zend\ServiceManager\ServiceLocatorInterface, VuFind\ILS\Driver\MultiBackend as MultiBackendBase, CPK\ILS\Driver\SolrIdResolver as SolrIdResolver;
+use VuFind\Exception\ILS as ILSException, VuFind\ILS\Driver\MultiBackend as MultiBackendBase, CPK\ILS\Driver\SolrIdResolver as SolrIdResolver;
 
 /**
  * Multiple Backend Driver.
@@ -251,33 +251,45 @@ class MultiBackend extends MultiBackendBase
      *
      * @param array $ids
      *            The array of record ids to retrieve the status for
-     *            
+     *
      * @throws ILSException
      * @return array An array of getStatus() return values on success.
      */
-    public function getStatuses($ids, $bibId = null, $filter = [])
+    public function getStatuses($ids, $bibId = null, $filter = [], $nextItemToken = null, $user = null)
     {
             // We assume all the ids passed here are being processed by only one ILS/Driver
         if ($bibId === null)
             return $this->getEmptyStatuses($ids);
-        
+
         $source = $this->getSource($bibId);
         $driver = $this->getDriver($source);
-        
+
+        $profile = null;
+        if ($user != null) {
+            $identities = $user->getLibraryCards();
+            foreach ($identities as $identity) {
+                $profile = $user->libCardToPatronArray($identity);
+                $agency = $this->getSource($profile['cat_username']);
+                if ($agency === $source) {
+                    $profile = $this->stripIdPrefixes($profile, $source);
+                    break;
+                }
+                else $profile = null;
+            }
+        }
+
         if ($driver === null)
-            return $this->getEmptyStatuses($ids);
-        
+            throw new ILSException("Driver is undefined!");
+
         if ($driver instanceof XCNCIP2 || $driver instanceof Aleph) {
-            
+
             foreach ($ids as &$id) {
                 $id = $this->stripIdPrefixes($id, $source);
             }
-            
-            $patron = $this->ilsAuth->storedCatalogLogin();
-            $patron = $this->stripIdPrefixes($patron, $source);
+
             $bibId = $this->stripIdPrefixes($bibId, $source);
-            
-            $statuses = $driver->getStatuses($ids, $patron, $filter, $bibId);
+
+            $statuses = $driver->getStatuses($ids, $profile, $filter, $bibId, $nextItemToken);
             return $this->addIdPrefixes($statuses, $source);
         } else
             return parent::getStatuses($ids);

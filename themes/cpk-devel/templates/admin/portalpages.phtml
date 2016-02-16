@@ -1,0 +1,76 @@
+<?
+  // Set page title.
+  $this->headTitle($this->translate('Portal pages | Administration'));
+  
+  // Set up breadcrumbs:
+  $this->layout()->breadcrumbs = '<li><a title="' . $this->transEsc('Main page') . '" href="/">' . $this->transEsc('Main page') . '</a></li> ' .
+      '<li><a href="/Admin/Home">'.$this->transEsc('Administration').'</a></li>'.
+      '<li class="active">'.$this->transEsc('Portal pages').'</li>';
+  
+  $this->layout()->title = $this->translate('Portal pages');
+?>
+<div class="row clearfix">
+  <ul class="breadcrumb hidden-print"><?=$this->layout()->breadcrumbs ?></ul>
+  
+  <div class="col-sm-3">
+    <?=$this->render("admin/menu.phtml")?>
+  </div>
+  
+  <div class="col-sm-9">
+    <h2><?=$this->translate('Portal pages')?></h2>
+    <div class='well'>
+      <div class='admin-toolbox'>
+        <a href='/Admin/PortalPages/Create'><button class='btn btn-lg btn-primary'><?=$this->translate('Create page')?></button></a>
+      </div>
+      <div>
+        <? if (count($this->pages)): ?>
+        <table class='table table-hover table-responsive'>
+          <thead>
+            <tr>
+              <th width='55%'><?=$this->translate('Page title')?></th>
+              <th width='15%'><?=$this->translate('Language')?></th>
+              <th width='20%'><?=$this->translate('Last modified')?></th>
+              <th width='10%'></th>
+            </tr>
+          </thead>
+          <tbody>
+            <? foreach($this->pages as $page): ?>
+            <tr class='portal-page-row'>
+              <td>
+                <?= htmlspecialchars($page['title']) ?>
+                <? if ($page['published'] === 0): ?>
+                <span class="label label-warning pull-right"><?=$this->translate('Not published')?></span>
+                <? endif; ?>
+              </td>
+              <td ><?=$this->translate($page['language_code'])?></td>
+              <td><?=date("d. M. Y", strtotime($page['last_modified_timestamp']))?></td>
+              <td class='portal-pages-actions'>
+                <div class="dropdown pull-right">
+                  <span class='actions' id="actions" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+                    <i class='fa fa-ellipsis-v dropdown-toggle pointer'></i>
+                  </span>
+                  <ul class="dropdown-menu" aria-labelledby="actions">
+                    <li>
+                      <a href='/Admin/PortalPages/Edit/<?= $page['id'] ?>'>
+                        <i class='fa fa-edit'></i>
+                        <?=$this->translate('Edit')?>
+                      </a>
+                    </li>
+                    <li>
+                      <a target='_blank' href='/Portal/Page/<?= $page['pretty_url'] ?>?displayToken=94752eedb5baaf2896e35b4a76d9575c'>
+                        <i class='fa fa-tv'></i>
+                        <?=$this->translate('Preview')?>
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </td>
+            </tr>
+            <? endforeach; ?>
+          </tbody>
+        </table>
+        <? endif; ?>
+      </div>
+    </div>
+  </div>
+</div>

@@ -4,6 +4,7 @@
 
   // Disable top search box -- this page has a special layout.
   $this->layout()->searchbox = false;
+  $this->layout()->frontpage = true;
 
   // Set default value if necessary:
   if (!isset($this->searchClassId)) {
@@ -27,7 +28,19 @@
       <p><a href="mailto:<?=$supportEmail?>"><?=$supportEmail?></a></p>
     </div>
   <? endif; ?>
-  <div class="well well-lg clearfix" role="search">
-    <?=$this->render("search/searchbox.phtml")?>
+  <div class="col-md-4">
+    <h2><?=$this->transEsc('frontpage-most-wanted')?></h2>
+    <div class="white-box" style="height: 600px;">
+    </div>
+  </div>
+  <div class="col-md-4">
+    <h2><?=$this->transEsc('frontpage-events')?></h2>
+    <div class="white-box" style="height: 600px;">
+    </div>
+  </div>
+  <div class="col-md-4">
+    <h2><?=$this->transEsc('frontpage-news')?></h2>
+    <div class="white-box" style="height: 600px;">
+    </div>
   </div>
 </div>

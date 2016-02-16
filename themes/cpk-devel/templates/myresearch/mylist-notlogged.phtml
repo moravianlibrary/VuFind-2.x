@@ -1,0 +1,114 @@
+<?
+
+  // Set up page title:
+  $this->headTitle(isset($list) ? $list->title : $this->translate('Favorites'));
+
+  // Add translations for the favorites ng-app
+  $this->jsTranslations()->addStrings(
+      array(
+          'mainAuthor' => $this->translate('Main Author'),
+          'published' => $this->translate('Published'),
+          'onlineResources' => $this->translate('online_resources'),
+          'delete' => $this->translate('Delete'),
+          'confirmDelete' => $this->translate('confirm_delete_brief'),
+          'yes' => $this->translate('confirm_dialog_yes'),
+          'no' => $this->translate('confirm_dialog_no'),
+          
+          /* Actualization with:
+           * cat /tmp/copyPastedPartOfLangFile | awk "{print \"'\"\$1\"'\"}" | awk '{print $1 " => $this->translate(" $1 "),"}'
+           */
+          
+          '0/ARTICLES/' => $this->translate('0/ARTICLES/'),
+          '0/BOOKS/' => $this->translate('0/BOOKS/'),
+          '0/ELECTRONIC_SOURCE/' => $this->translate('0/ELECTRONIC_SOURCE/'),
+          '0/LARGE_PRINTS/' => $this->translate('0/LARGE_PRINTS/'),
+          '0/MANUSCRIPTS/' => $this->translate('0/MANUSCRIPTS/'),
+          '0/MAPS/' => $this->translate('0/MAPS/'),
+          '0/MUSICAL_SCORES/' => $this->translate('0/MUSICAL_SCORES/'),
+          '0/NORMS/' => $this->translate('0/NORMS/'),
+          '0/PERIODICALS/' => $this->translate('0/PERIODICALS/'),
+          '0/VISUAL_DOCUMENTS/' => $this->translate('0/VISUAL_DOCUMENTS/'),
+          '0/AUDIO/' => $this->translate('0/AUDIO/'),
+          '1/AUDIO/CD/' => $this->translate('1/AUDIO/CD/'),
+          '1/AUDIO/DVD/' => $this->translate('1/AUDIO/DVD/'),
+          '1/AUDIO/LP/' => $this->translate('1/AUDIO/LP/'),
+          '1/AUDIO/CASSETTE/' => $this->translate('1/AUDIO/CASSETTE/'),
+          '1/AUDIO/OTHER/' => $this->translate('1/AUDIO/OTHER/'),
+          '0/VIDEO/' => $this->translate('0/VIDEO/'),
+          '1/VIDEO/BLURAY/' => $this->translate('1/VIDEO/BLURAY/'),
+          '1/VIDEO/VHS/' => $this->translate('1/VIDEO/VHS/'),
+          '1/VIDEO/DVD/' => $this->translate('1/VIDEO/DVD/'),
+          '1/VIDEO/CDROM/' => $this->translate('1/VIDEO/CDROM/'),
+          '1/VIDEO/OTHER/' => $this->translate('1/VIDEO/OTHER/'),
+          '0/OTHER/' => $this->translate('0/OTHER/'),
+          '1/OTHER/BRAILLE/' => $this->translate('1/OTHER/BRAILLE/'),
+          '1/OTHER/KIT/' => $this->translate('1/OTHER/KIT/'),
+          '1/OTHER/OBJECT/' => $this->translate('1/OTHER/OBJECT/'),
+          '1/OTHER/MICROFORMS/' => $this->translate('1/OTHER/MICROFORMS/'),
+          '1/OTHER/MIX_DOCUMENT/' => $this->translate('1/OTHER/MIX_DOCUMENT/'),
+          '1/OTHER/UNSPECIFIED/' => $this->translate('1/OTHER/UNSPECIFIED/'),
+      )
+      );
+
+  // Set up breadcrumbs:
+  $currPage = isset($list) ? 'List' : 'Favorites';
+  $this->layout()->breadcrumbs = '<li class="active">' . $this->transEsc($currPage) . '</li>';
+?>
+
+
+<?=$this->flashmessages()?>
+<ul class="breadcrumb hidden-print"><?=$this->layout()->breadcrumbs ?></ul>
+<div class="row" ng-controller="ListController as listCtrl">
+  <div class="<?=$this->layoutClass('mainbody')?>" list-not-empty="true">
+    <div class="clearfix hidden-print">
+  	<h2 class="pull-left flip"><?=$this->transEsc('Favorites')?></h2>
+      <div class="pull-right flip">
+        <?=$this->transEsc("Showing")?>
+        <strong>1</strong> - <strong>{{ listCtrl.listLength }}</strong>
+        <?=$this->transEsc('of')?> <strong>{{ listCtrl.listLength }}</strong>
+        </div>
+    </div>
+		<div class="resulthead">
+			<div class="pull-right flip">
+				<select name="sort" class="form-control">
+					<option ng-show="listCtrl.canSort('alphabetical')"
+						value='alphabetical'><?=$this->transEsc('By Alphabetical')?></option>
+					<option ng-show="listCtrl.canSort('author')" value='author'><?=$this->transEsc('By Author')?></option>
+					<option ng-show="listCtrl.canSort('callNo')" value='callNo'><?=$this->transEsc('By Call Number')?></option>
+					<option ng-show="listCtrl.canSort('course')" value='course'><?=$this->transEsc('By Course')?></option>
+					<option ng-show="listCtrl.canSort('department')" value='department'><?=$this->transEsc('By Department')?></option>
+					<option ng-show="listCtrl.canSort('era')" value='era'><?=$this->transEsc('By Era')?></option>
+					<option ng-show="listCtrl.canSort('genre')" value='genre'><?=$this->transEsc('By Genre')?></option>
+					<option ng-show="listCtrl.canSort('instructor')" value='instructor'><?=$this->transEsc('By Instructor')?></option>
+					<option ng-show="listCtrl.canSort('popularity')" value='popularity'><?=$this->transEsc('By Popularity')?></option>
+					<option ng-show="listCtrl.canSort('recent')" value='recent'><?=$this->transEsc('By Recent')?></option>
+					<option ng-show="listCtrl.canSort('region')" value='region'><?=$this->transEsc('By Region')?></option>
+					<option ng-show="listCtrl.canSort('title')" value='title'><?=$this->transEsc('By Title')?></option>
+					<option ng-show="listCtrl.canSort('topic')" value='topic'><?=$this->transEsc('By Topic')?></option>
+				</select>
+			</div>
+		</div>
+	<div>
+    <label>
+      <input ng-model="listCtrl.allSelected" ng-change="listCtrl.selectAll()" type="checkbox"/>
+      <?=$this->transEsc('select_page')?> | <?=$this->transEsc('with_selected')?>:
+    </label>
+
+	<div class="btn-group" title="<?=$this->transEsc('login_to_use_this')?>">
+    <input class="btn btn-default" type="submit" ng-click="listCtrl.removeSelected()" value="<?=$this->transEsc('Delete')?>" title="<?=$this->transEsc('delete_selected')?>"/>
+    <input class="btn btn-default" type="submit" value="<?=$this->transEsc('email_selected')?>" title="<?=$this->transEsc('login_to_use_this')?>" disabled/>
+    <input class="btn btn-default" type="submit" value="<?=$this->transEsc('export_selected')?>" title="<?=$this->transEsc('login_to_use_this')?>" disabled/>
+    <input class="btn btn-default" type="submit" value="<?=$this->transEsc('print_selected')?>" title="<?=$this->transEsc('login_to_use_this')?>" disabled/>
+    </div>
+  	<div ng-repeat="fav in listCtrl.favorites">
+    	<div favorites-list-item>
+    	</div>
+    </div>
+	</div>
+
+  </div>
+
+	<div list-not-empty="false" class="<?=$this->layoutClass('mainbody')?>">
+		<p><?=$this->transEsc('You do not have any saved resources')?></p>
+	</div>
+</div>

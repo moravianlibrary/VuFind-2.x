@@ -90,11 +90,14 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
             ->get($options->getSearchIni());
         $types = isset($config->Autocomplete_Types) ?
             $config->Autocomplete_Types->toArray() : [];
-
+            
         // Figure out which handler to use:
-        $titleModule    = "SolrEdgeFaceted:title_autocomplete:title_str";
-        $authorModule   = "SolrEdgeFaceted:author_autocomplete:authorStr";
-        $subjectModule  = "Solr:Subject:topic,genre,geographic,era";
+        // Handler
+        // solr field with "text_autocomplete" type
+        // solr field with "string" type that is exactly equal to previous one
+        $titleModule   = "SolrEdgeFaceted:title_autocomplete:title_str";
+        $authorModule  = "SolrEdgeFaceted:author_autocomplete:author_str_mv";
+        $subjectModule = "SolrEdgeFaceted:subject_autocomplete:subject_str_mv";
 
         // Get suggestions:
         if ($titleModule) {
@@ -124,7 +127,7 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
                 $subjectModule .= ':'; // force colon to avoid warning in explode below
             }
             list($subjectName, $subjectParams) = explode(':', $subjectModule, 2);
-            $subjectHandler = $this->get($subjectName);
+            $subjectHandler = clone $this->get($subjectName);
             $subjectHandler->setConfig($subjectParams);
         }
         

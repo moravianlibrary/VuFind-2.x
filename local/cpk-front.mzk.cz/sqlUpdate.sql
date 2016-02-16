@@ -60,3 +60,45 @@ ALTER TABLE `user_settings` ADD `records_per_page` TINYINT NULL ;
 /* Create column record_per_page in user_settings table */
 ALTER TABLE `user_settings` ADD `sorting` VARCHAR(40) NULL ;
 
+/* Create table system for checking DB version */
+CREATE TABLE IF NOT EXISTS `system` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `key` varchar(32) NOT NULL,
+  `value` varchar(32) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `key_2` (`key`),
+  UNIQUE KEY `id` (`id`),
+  KEY `key` (`key`)
+) ENGINE=InnoDB  DEFAULT CHARSET=latin1 AUTO_INCREMENT=2 ;
+
+/* Increment this column on every sqlUpdate.sql update  */
+INSERT INTO `system` (`id`, `key`, `value`) VALUES
+(1, 'DB_VERSION', '1');
+
+/* Create table for storing content of Portal pages */
+DROP TABLE IF EXISTS `portal_pages`;
+CREATE TABLE IF NOT EXISTS `portal_pages` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `pretty_url` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `content` text COLLATE utf8_unicode_ci NOT NULL,
+  `language_code` varchar(8) COLLATE utf8_unicode_ci NOT NULL,
+  `published` tinyint(1) NOT NULL,
+  `placement` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `position` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `order_priority` tinyint(4) NOT NULL,
+  `last_modified_timestamp` datetime NOT NULL,
+  `last_modified_user_id` int(11) NOT NULL
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `id` (`id`),
+  UNIQUE KEY `title` (`title`),
+  UNIQUE KEY `pretty_url` (`pretty_url`),
+  KEY `language_code` (`language_code`),
+  KEY `pretty_url_2` (`pretty_url`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci AUTO_INCREMENT=2 ;
+UPDATE `system` SET `value`='3' WHERE `key`='DB_VERSION';
+
+ALTER TABLE `user_card`
+  ADD `major` VARCHAR(100) NULL,
+  ADD INDEX ( `major` );
+UPDATE `system` SET `value`='4' WHERE `key`='DB_VERSION';

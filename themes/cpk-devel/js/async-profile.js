@@ -35,7 +35,8 @@ function fetchProfile(cat_username) {
 function updateProfileTable(response) {
 
     // Update notifications not to let those fetch the blocks again ;)
-    if (__notif !== undefined && __notif.blocks !== undefined) {
+    var nofifIsNotDefined = typeof __notif !== "undefined" && typeof __notif.blocks !== "undefined";
+    if (! nofifIsNotDefined) {
 	__notif.helper.processResponseAsynchronously(__notif.blocks, response);
     }
     
@@ -98,5 +99,11 @@ function updateProfileTable(response) {
 	    }
 	    
 	}
+    } else {
+
+	if (typeof response === "object" && typeof response.toSource !== "undefined") // Only Mozilla can convert object to source string ..
+	    response = response.toSource();
+
+	console.error("cat_username from the response was not found on this page .. cannot update the profile table! " + response, arguments);
     }
 }

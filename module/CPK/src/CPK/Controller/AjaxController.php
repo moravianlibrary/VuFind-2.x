@@ -40,6 +40,7 @@ use MZKCommon\Controller\AjaxController as AjaxControllerBase, VuFind\Exception\
  */
 class AjaxController extends AjaxControllerBase
 {
+    use \VuFind\Db\Table\DbTableAwareTrait;
 
     /**
      * Downloads SFX JIB content for current record.
@@ -163,6 +164,7 @@ class AjaxController extends AjaxControllerBase
         $ids = $this->params()->fromPost('ids');
         $bibId = $this->params()->fromPost('bibId');
         $filter = $this->params()->fromPost('activeFilter');
+        $nit = $this->params()->fromPost('next_item_token');
 
         $viewRend = $this->getViewRenderer();
 
@@ -177,7 +179,7 @@ class AjaxController extends AjaxControllerBase
                 'msg' => 'No bibId provided !'
             ], self::STATUS_ERROR);
         }
-        
+
         $ids = array_filter($ids);
 
         $ilsDriver = $this->getILS()->getDriver();
@@ -185,7 +187,8 @@ class AjaxController extends AjaxControllerBase
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
 
             try {
-                $statuses = $ilsDriver->getStatuses($ids, $bibId, $filter);
+                $user = $this->getAuthManager()->isLoggedIn();
+                $statuses = $ilsDriver->getStatuses($ids, $bibId, $filter, $nit, $user);
             } catch (\Exception $e) {
                 return $this->output([
                     'statuses' => $this->getTranslatedUnknownStatuses($ids, $viewRend),
@@ -201,6 +204,9 @@ class AjaxController extends AjaxControllerBase
                 ], self::STATUS_ERROR);
 
             $itemsStatuses = [];
+
+            if (! empty($statuses)) $nextItemToken = $statuses[0]['next_item_token'];
+            else $nextItemToken = null;
 
             foreach ($statuses as $status) {
                 $id = $status['item_id'];
@@ -228,12 +234,18 @@ class AjaxController extends AjaxControllerBase
 
                 if (! empty($status['label']))
                     $itemsStatuses[$id]['label'] = $status['label'];
-                
+
                 if (! empty($status['addLink']))
                     $itemsStatuses[$id]['addLink'] = $status['addLink'];
-                    
+
                 if (! empty($status['availability']))
                     $itemsStatuses[$id]['availability'] = $status['availability'];
+
+                if (! empty($status['collection']))
+                    $itemsStatuses[$id]['collection'] = $status['collection'];
+
+                if (! empty($status['department']))
+                    $itemsStatuses[$id]['department'] = $status['department'];
 
                 $key = array_search($id, $ids);
 
@@ -241,8 +253,10 @@ class AjaxController extends AjaxControllerBase
                     unset($ids[$key]);
             }
 
-            if (isset($ids) && count($ids) > 0)
+            if (isset($ids) && count($ids) > 0) {
                 $retVal['remaining'] = $ids;
+                $retVal['next_item_token'] = $nextItemToken;
+            }
 
             $retVal['statuses'] = $itemsStatuses;
             return $this->output($retVal, self::STATUS_OK);
@@ -315,7 +329,7 @@ class AjaxController extends AjaxControllerBase
                                  explode('.', $cat_username)[0] . '.ini"'
                         ], self::STATUS_ERROR);
                 }
-            } catch (\VuFind\Exception\ILS $e) {
+            } catch (\Exception $e) {
                 return $this->outputException($e, $cat_username);
             }
 
@@ -355,8 +369,8 @@ class AjaxController extends AjaxControllerBase
             try {
                 // Try to get the profile ..
                 $holds = $catalog->getMyHolds($patron);
-            } catch (\VuFind\Exception\ILS $e) {
-               return $this->outputException($e, str_replace('.', '\.', $cat_username));
+            } catch (\Exception $e) {
+               return $this->outputException($e, $cat_username);
             }
 
             $recordList = $obalky = [];
@@ -458,8 +472,8 @@ class AjaxController extends AjaxControllerBase
                 $data['cat_username'] = $cat_username;
                 $data['fines'] = $fines;
                 $data['source'] = $fines['source'];
-                
-            } catch (\VuFind\Exception\ILS $e) {
+
+            } catch (\Exception $e) {
                 return $this->outputException($e, $cat_username);
             }
 
@@ -485,7 +499,7 @@ class AjaxController extends AjaxControllerBase
             return $hasPermissions;
 
         $renderer = $this->getViewRenderer();
-        
+
         $catalog = $this->getILS();
 
         $ilsDriver = $catalog->getDriver();
@@ -500,10 +514,10 @@ class AjaxController extends AjaxControllerBase
             try {
                 // Try to get the profile ..
                 $result = $ilsDriver->getMyTransactions($patron);
-            } catch (\VuFind\Exception\ILS $e) {
+            } catch (\Exception $e) {
                 return $this->outputException($e, $cat_username);
             }
-            
+
             $renewStatus = $catalog->checkFunction('Renewals', compact('patron'));
 
             $obalky = $transactions = [];
@@ -559,7 +573,7 @@ class AjaxController extends AjaxControllerBase
                     'libraryIdentity' => compact('transactions'),
                     'AJAX' => true
                 ]);
-            
+
             $splitted_cat_username = explode('.', $cat_username);
 
             $toRet = [
@@ -581,81 +595,140 @@ class AjaxController extends AjaxControllerBase
                 self::STATUS_ERROR);
     }
     
+    /**
+     * Creates new list into which it saves sent favorites.
+     *
+     * @return \Zend\Http\Response
+     */
+    public function pushFavoritesAjax() {
+        
+        $favorites = $this->params()->fromPost('favs');
+        
+        // Check user is logged in ..
+        if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            return $this->output('You are not logged in.', self::STATUS_ERROR);
+        }
+        
+        // Set DbTableManager ..
+        $this->setDbTableManager(
+            $this->getServiceLocator()->get('VuFind\DbTablePluginManager')
+        );
+        
+        $table = $this->getDbTable('UserList');
+        
+        $list = $table->getNew($user);
+        $list->title = $this->translate('transferred_favs');
+        $list->save($user);
+        
+        $params = [
+            'list' => $list->id
+        ];
+        
+        $recLoader = $this->getRecordLoader();
+        
+        $results = [];
+        
+        foreach ($favorites as $favorite) {
+            
+            if (! isset($favorite['title']['link'])) {
+                return $this->output('Favorite client sent to server has not title link.', self::STATUS_ERROR);
+            }
+            
+            $titleLink = $favorite['title']['link'];
+            
+            preg_match('/\/([^\/]+$)/', $titleLink, $matches);
+            
+            if (count($matches) === 0) {
+                return $this->output('Invalid title link provided.', self::STATUS_ERROR);
+            }
+            
+            $recId = $matches[1];
+            
+            $record = $recLoader->load($recId, 'Solr', false);
+            
+            $result = $record->saveToFavorites($params, $user);
+            
+            array_push($results, $result);
+        }
+        
+        return $this->output($results, self::STATUS_OK);
+    }
+
     public function haveAnyOverdueAjax()
     {
             // Get the cat_username being requested
         $cat_username = $this->params()->fromPost( 'cat_username' );
-        
+
         $hasPermissions = $this->hasPermissions( $cat_username );
-        
+
         if ($hasPermissions instanceof \Zend\Http\Response)
             return $hasPermissions;
-                
+
         $ilsDriver = $this->getILS()->getDriver();
-        
+
         if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
-            
+
             $patron = [
                 'cat_username' => $cat_username,
                 'id' => $cat_username
             ];
-            
+
             try {
                 // Try to get the profile ..
                 $result = $ilsDriver->getMyTransactions( $patron );
-            } catch ( \VuFind\Exception\ILS $e ) {
+            } catch (\Exception $e ) {
                 return $this->outputException( $e, $cat_username );
             }
-            
+
             $showOverdueMessage = false;
-            
+
             foreach ( $result as $current ) {
-                
+
                 $ilsDetails = $this->getDriverForILSRecord( $current )->getExtraDetail( 'ils_details' );
-                
+
                 if (isset( $ilsDetails['dueStatus'] ) && $ilsDetails['dueStatus'] == "overdue") {
                     $showOverdueMessage = true;
                     break;
                 }
             }
-            
+
             $source = explode( '.', $cat_username )[0];
-            
+
             $toRet = [
                 'overdue' => $showOverdueMessage,
                 'source' => $source
             ];
-            
+
             return $this->output( $toRet, self::STATUS_OK );
         } else
-            return $this->output( 
+            return $this->output(
                     [
                         'source' => $source,
                         'cat_username' => $cat_username,
                         'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
                     ], self::STATUS_ERROR );
     }
-    
+
     public function updateNotificationsReadAjax()
     {
             // Check user is logged in ..
         if (!$user = $this->getAuthManager()->isLoggedIn()) {
             return $this->output( 'You are not logged in.', self::STATUS_ERROR );
         }
-        
+
         $currentNotificationsRead = $this->params()->fromPost( 'curr_notifies_read' );
-        
+
         $encodedReadNotifications = json_encode( $currentNotificationsRead );
-        
+
         if (strlen( $encodedReadNotifications ) > 512) {
-            return $this->output( 
+            return $this->output(
                     $this->translate( 'JSON you want to store is longer than 512 chars!!' ), self::STATUS_ERROR );
         }
-        
+
         // Just overwrite with current read notifications
         $user->read_notifications = $encodedReadNotifications;
         $user->save();
-        
+
         return $this->output( "OK", self::STATUS_OK );
     }
 
@@ -800,7 +873,7 @@ class AjaxController extends AjaxControllerBase
             ]);
         return $this->output($html, self::STATUS_OK);
     }
-    
+
     protected function getTranslatedUnknownStatuses($ids, $viewRend) {
         $statuses = [];
         foreach($ids as $id) {
@@ -920,7 +993,11 @@ class AjaxController extends AjaxControllerBase
             $cat_username = 'unknown';
             $source = $cat_username;
         } else {
-            $source = explode('.', $cat_username)[0];
+            $splittedCatUsername = explode('.', $cat_username);
+
+            $source = $splittedCatUsername[0];
+
+            $cat_username = join('\.', $splittedCatUsername);
         }
 
         $data = [
@@ -930,7 +1007,7 @@ class AjaxController extends AjaxControllerBase
         ];
 
         if ($e instanceof VuFind\Exception\ILS) {
-            $data['consideration'] = 'There is a chance you have missing configuration file called "' . explode('.', $cat_username)[0] . '.ini"';
+            $data['consideration'] = 'There is a chance you have missing configuration file called "' . §source . '.ini"';
         }
 
         return $this->output($data, self::STATUS_ERROR);
@@ -987,7 +1064,7 @@ class AjaxController extends AjaxControllerBase
             $autocompleteManager->getSuggestions($query), self::STATUS_OK
         );
     }
-    
+
     /**
      * Is citation available
      *
@@ -996,32 +1073,107 @@ class AjaxController extends AjaxControllerBase
     public function isCitationAvailableAjax()
     {
         $recordId = $this->params()->fromPost('recordId');
-        
+
         $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
         $recordDriver = $recordLoader->load($recordId);
-        
+
         $parentRecordId = $recordDriver->getParentRecordId();
         $parentRecordDriver = $recordLoader->load($parentRecordId);
-        
+
         $format = $parentRecordDriver->getRecordType();
         if ($format === 'marc')
             $format .= '21';
         $recordXml = $parentRecordDriver->getXml($format);
-        
+
         if (strpos($recordXml, "datafield") === false)
             return $this->output($statusCode, self::STATUS_ERROR);
-        
+
         $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
             .$recordId;
-    
+
         $statusCode = get_headers($citationServerUrl)[0];
 
-        if ($statusCode === 'HTTP/1.1 200 OK')
+        if ($statusCode === 'HTTP/1.1 200 OK') {
             return $this->output($statusCode, self::STATUS_OK);
-        
+        }
+
         return $this->output($statusCode, self::STATUS_ERROR);
     }
     
+    /**
+     * Get citation
+     *
+     * @return string
+     */
+    public function getCitationAjax()
+    {
+        $recordId = $this->params()->fromPost('recordId');
+        $changedCitationValue = $this->params()->fromPost('citationValue');
+        
+        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
+        $recordDriver = $recordLoader->load($recordId);
+    
+        $parentRecordId = $recordDriver->getParentRecordId();
+        $parentRecordDriver = $recordLoader->load($parentRecordId);
+    
+        $format = $parentRecordDriver->getRecordType();
+        if ($format === 'marc')
+            $format .= '21';
+            $recordXml = $parentRecordDriver->getXml($format);
+    
+        if (strpos($recordXml, "datafield") === false)
+            return $this->output($statusCode, self::STATUS_ERROR);
+
+        // Set preferred citation style
+        if ($changedCitationValue == 'false') {
+            if (! $user = $this->getAuthManager()->isLoggedIn()) {
+                $preferredCitationStyle = $this->getConfig()
+                ->Record->default_citation_style;
+            } else {
+                $userSettingsTable = $this->getTable("usersettings");
+                $citationStyleTable = $this->getTable("citationstyle");
+                $preferredCitationStyleId = $userSettingsTable
+                ->getUserCitationStyle($user);
+                $preferredCitationStyle = $citationStyleTable
+                ->getCitationValueById($preferredCitationStyleId);
+            }
+        } else {
+            $preferredCitationStyle = $changedCitationValue;
+        }
+
+        $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
+            .$recordId
+            ."?server=".$_SERVER['SERVER_NAME']
+            ."&citacniStyl=".$preferredCitationStyle;
+
+        $statusCode = get_headers($citationServerUrl)[0];
+
+        if ($statusCode === 'HTTP/1.1 200 OK') {
+            
+            $ch = curl_init($citationServerUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
+            $html = curl_exec($ch);
+            curl_close($ch);
+            
+            $doc = new \DOMDocument();
+            $doc->loadHTML($html);
+
+            $xpath = new \DOMXPath($doc);
+
+            $results = $xpath->query('//*[@id="citace"]');
+
+            if (! empty($results)) {
+                $citation = $results->item(0)->nodeValue;
+
+                return $this->output($citation, self::STATUS_OK);
+            }
+            
+        }
+        
+        return $this->output('false', self::STATUS_ERROR);
+    }
+
     /**
      * Set preferred citation style into user_settings table
      *
@@ -1034,9 +1186,9 @@ class AjaxController extends AjaxControllerBase
             $this->flashExceptions($this->flashMessenger());
             return $this->forceLogin();
         }
-        
+
         $citationStyleValue = $this->params()->fromPost('citationStyleValue');
-        
+
         try {
             $userSettingsTable = $this->getTable("usersettings");
             $userSettingsTable->setCitationStyle($user, $citationStyleValue);
@@ -1046,7 +1198,7 @@ class AjaxController extends AjaxControllerBase
 
         return $this->output([], self::STATUS_OK);
     }
-    
+
     /**
      * Set preferred amount of records per page user_settings table
      *
@@ -1059,9 +1211,9 @@ class AjaxController extends AjaxControllerBase
             $this->flashExceptions($this->flashMessenger());
             return $this->forceLogin();
         }
-    
+
         $recordsPerPage = $this->params()->fromPost('recordsPerPage');
-    
+
         try {
             $userSettingsTable = $this->getTable("usersettings");
             $userSettingsTable->setRecordsPerPage($user, $recordsPerPage);
@@ -1070,10 +1222,10 @@ class AjaxController extends AjaxControllerBase
         } catch (\Exception $e) {
             return $this->outputException($e);
         }
-    
+
         return $this->output([], self::STATUS_OK);
     }
-    
+
     /**
      * Set preferred sorting for user to user_settings table
      *
@@ -1086,9 +1238,9 @@ class AjaxController extends AjaxControllerBase
             $this->flashExceptions($this->flashMessenger());
             return $this->forceLogin();
         }
-    
+
         $preferredSorting = $this->params()->fromPost('preferredSorting');
-    
+
         try {
             $userSettingsTable = $this->getTable("usersettings");
             $userSettingsTable->setPreferredSorting($user, $preferredSorting);
@@ -1097,7 +1249,7 @@ class AjaxController extends AjaxControllerBase
         } catch (\Exception $e) {
             return $this->outputException($e);
         }
-    
+
         return $this->output([], self::STATUS_OK);
     }
 }

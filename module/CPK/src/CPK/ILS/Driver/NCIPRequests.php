@@ -86,6 +86,7 @@ class NCIPRequests {
         $this->insertUserIdTag($patron) .
         $this->insertItemIdTag($holdDetails['item_id'], $patron['agency']) .
         $this->insertRequestType("Hold") .
+        //$this->insertRequestType("Loan") .
         $this->insertRequestScopeType($requestScopeType);
         if (! empty($holdDetails['pickUpLocation'])) $body .= "<ns1:PickupLocation>" . htmlspecialchars($holdDetails['pickUpLocation']) . "</ns1:PickupLocation>";
         $body .= "</ns1:RequestItem>";
@@ -105,13 +106,15 @@ class NCIPRequests {
     }
 
     public function cancelRequestItemUsingRequestId($patron, $requestId) {
+        $requestType = "Estimate";
+        if ($this->sigla == "TAG001") $requestType = "Hold";
         $body =
         "<ns1:CancelRequestItem>" .
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
         $this->insertRequestIdTag($requestId, $patron) .
-        $this->insertRequestType("Estimate") .
-        $this->insertRequestScopeType("Item") .
+        $this->insertRequestType($requestType) .
+        $this->insertRequestScopeType("Bibliographic Item") .
         "</ns1:CancelRequestItem>";
         return $this->header() . $body . $this->footer();
     }
@@ -122,14 +125,15 @@ class NCIPRequests {
         $this->insertInitiationHeader($patron['agency']) .
         $this->insertUserIdTag($patron) .
         $this->insertItemIdTag($itemId, $patron['agency']) .
-        $this->allItemElementType() .
-        $this->allUserElementType() .
+        //$this->allItemElementType() .
+        //$this->allUserElementType() .
         "</ns1:RenewItem>";
         return $this->header() . $body . $this->footer();
     }
 
     public function LUISItemId($itemList, $nextItemToken = null, XCNCIP2 $mainClass = null, $patron = []) {
         $body = "<ns1:LookupItemSet>";
+        $body .= $this->insertInitiationHeader($patron['agency']);
         foreach ($itemList as $id) {
             if ($mainClass !== null)
                 list ($id, $agency) = $mainClass->splitAgencyId($id);
@@ -145,25 +149,24 @@ class NCIPRequests {
             $body .= "<ns1:NextItemToken>" . htmlspecialchars($nextItemToken) .
             "</ns1:NextItemToken>";
         }
-        
+
         // Append the Ext element containing the UserId
         if (! empty($patron)) {
             $body .= '<ns1:Ext>';
-            $body .= $this->patronInformation($patron);
+            $body .= $this->insertUserIdTag($patron);
             $body .= '</ns1:Ext>';
         }
-        
+
         $body .= "</ns1:LookupItemSet>";
         return $this->header() . $body . $this->footer();
     }
 
-    public function LUISBibItem($bibItemList, $nextItemToken = null, XCNCIP2 $mainClass = null, $patron = []) {
+    public function LUISBibItem($bibId, $nextItemToken = null, XCNCIP2 $mainClass = null, $patron = []) {
         $body = "<ns1:LookupItemSet>";
-        foreach ($bibItemList as $id) {
-            if ($mainClass !== null)
-                list ($id, $agency) = $mainClass->splitAgencyId($id);
-            $body .= $this->insertBibliographicItemIdTag($id);
-        }
+        $body .= $this->insertInitiationHeader($patron['agency']);
+        if ($mainClass !== null)
+            list ($bibId, $agency) = $mainClass->splitAgencyId($bibId);
+        $body .= $this->insertBibliographicItemIdTag($bibId);
         $body .= $this->allItemElementType();
         if (! empty($mainClass->getMaximumItemsCount())) {
             $body .= "<ns1:MaximumItemsCount>" .
@@ -174,15 +177,30 @@ class NCIPRequests {
             $body .= "<ns1:NextItemToken>" . htmlspecialchars($nextItemToken) .
             "</ns1:NextItemToken>";
         }
-        
+
         // Append the Ext element containing the UserId
-        if (! empty($patron)) {
+        /*if (! empty($patron)) { // DO NOT USE, causes bad circulation status
             $body .= '<ns1:Ext>';
-            $body .= $this->patronInformation($patron);
+            $body .= $this->insertUserIdTag($patron);
             $body .= '</ns1:Ext>';
-        }
-        
+        }*/
+
         $body .= "</ns1:LookupItemSet>";
+        return $this->header() . $body . $this->footer();
+    }
+
+    public function lookupAgency($patron) {
+        $body =
+        "<ns1:LookupAgency>" .
+        $this->insertInitiationHeader($patron['agency']) .
+        $this->insertAgencyIdTag($patron['agency']) .
+        $this->insertAgencyElementType("Agency Address Information") .
+        $this->insertAgencyElementType("Agency User Privilege Type") .
+        $this->insertAgencyElementType("Application Profile Supported Type") .
+        $this->insertAgencyElementType("Authentication Prompt") .
+        $this->insertAgencyElementType("Consortium Agreement") .
+        $this->insertAgencyElementType("Organization Name Information") .
+        "</ns1:LookupAgency>";
         return $this->header() . $body . $this->footer();
     }
 
@@ -270,7 +288,7 @@ class NCIPRequests {
                 "IDX" . "</ns1:RequestIdentifierType>" .
         "<ns1:RequestIdentifierValue>" . htmlspecialchars($requestId) . "</ns1:RequestIdentifierValue>" .
         "</ns1:RequestId>";
-        return body;
+        return $body;
     }
 
     protected function insertBibliographicItemIdTag($itemId) {
@@ -289,7 +307,7 @@ class NCIPRequests {
     /* Allowed values are: Accession Number, Barcode. */
     protected function insertItemIdentifierType() {
         $itemIdentifierType = "Accession Number";
-        // TODO if (library.equals("Liberec")) itemIdentifierType = "Barcode";
+        if ($this->sigla == "LIA001") $itemIdentifierType = "Barcode";
         return ($this->noScheme ?
                 "<ns1:ItemIdentifierType>" :
                 "<ns1:ItemIdentifierType ns1:Scheme=\"http://www.niso.org/ncip/v1_0/imp1/schemes/" .
@@ -335,6 +353,7 @@ class NCIPRequests {
         $this->insertUserElementType("Previous User Id");
         if ($this->sigla == "LIA001") {
             $body =
+            $this->insertUserElementType("Block Or Trap") .
             $this->insertUserElementType("Name Information") .
             $this->insertUserElementType("User Address Information");
         }
@@ -387,5 +406,13 @@ class NCIPRequests {
     protected function userAuthenticationInputType() {
         //if (library.equals("Zlin")) return "Username"; // TODO
         return "User Id";
+    }
+
+    protected function insertAgencyElementType($value) {
+        return ($this->noScheme ?
+                "<ns1:AgencyElementType>" :
+                "<ns1:AgencyElementType ns1:Scheme=\"http://www.niso.org/ncip/v1_0/schemes/agencyelementtype/" .
+                "agencyelementtype.scm\">") .
+                $value . "</ns1:AgencyElementType>";
     }
 }

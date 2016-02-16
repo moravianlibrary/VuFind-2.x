@@ -9,6 +9,9 @@
   $controllerClass = 'controller:' . $this->record($this->driver)->getController();
   $cart = $this->cart();
   $cartId = $this->driver->getResourceSource() . '|' . $id;
+  
+  $handleOfflineFavorites = ! $this->isLoggedIn && $this->offlineFavoritesEnabled;
+
 ?>
 <ul class="list-group record-toolbar">
   <li class="list-group-item"><a id="mail-record" class="modal-link <?=$controllerClass?>" href="<?=$this->url('record-email', array('id'=>$id)) ?>" title="<?=$this->transEsc('Email this')?>" rel="nofollow"><i class="fa fa-fw fa-envelope"></i> <?=$this->transEsc('Email this')?></a></li>
@@ -26,9 +29,21 @@
   <? endif; ?>
 
   <? if ($this->userlist()->getMode() !== 'disabled'): ?>
-    <li class="list-group-item"><a id="save-record" class="modal-link <?=$controllerClass?>" href="<?=$this->recordLink()->getActionUrl($this->driver, 'Save')?>" title="<?=$this->transEsc('Add to favorites')?>" rel="nofollow"><i class="fa fa-fw fa-star"></i> <?=$this->transEsc('Add to favorites')?></a></li>
+    <li class="list-group-item">
+    	<a id="save-record" class="modal-link <?=$controllerClass?>"
+    	 
+  	     <? if ($handleOfflineFavorites) : ?>
+        	href="#" ng-controller="RecordFavController as recFavCtrl" ng-click="recFavCtrl.addOrRemoveFavorite()"
+    	 <? else: ?>
+        	href="<?=$this->recordLink()->getActionUrl($this->driver, 'Save')?>"
+         <? endif; ?>
+        
+    title="<?=$this->transEsc('Add to favorites')?>" rel="nofollow"><i class="fa fa-fw fa-star"></i><span add-remove="add"><?=$this->transEsc('Add to favorites')?></span><span add-remove="rem"><b><?=$this->transEsc('remove_from_favorites')?></b></span></a></li>
   <? endif; ?>
-  <li class="list-group-item hidden" id='citace-pro'><a class="modal-link citations-link" title="<?=$this->transEsc('Show citations')?>" ><i class="fa fa-fw fa-quote-right"></i> <?=$this->transEsc('Show citations')?></a></li>
+  <li class="list-group-item" id='citace-pro'>
+    <a class="modal-link disabled-link" title="<?=$this->transEsc('Show citations')?>" ><i class="fa fa-fw fa-quote-right"></i> <?=$this->transEsc('Show citations')?></a>
+    <i id='citation-link-spinner' class="fa fa-spinner fa-spin"></i>
+  </li>
   <? if (!empty($addThis)): ?>
     <li><a class="addThis addthis_button list-group-item" href="https://www.addthis.com/bookmark.php?v=250&amp;pub=<?=urlencode($addThis)?>"><i class="fa fa-fw fa-bookmark"></i> <?=$this->transEsc('Bookmark')?></a></li>
   <? endif; ?>
@@ -52,7 +67,7 @@
 </ul>
 <script>
 jQuery( document ).ready(function( $ ) {
-	$( '.citations-link' ).on('click', function(){
+	$( '#citace-pro' ).on('click', '.citations-link', function(){
 		$( '#citationsModal' ).modal( 'show' );
 	});
 });

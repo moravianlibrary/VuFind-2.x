@@ -16,10 +16,12 @@ var holdingsILS = {
     },
 
     // Async holdings loader
-    getHoldingStatuses : function(ids) {
+    getHoldingStatuses : function(ids, nit) {
 
 	if (typeof ids !== 'object')
 	    ids = holdingsILS.getHoldingsIds();
+	
+	if (typeof nit === 'undefined') { nit = null; }
 
 	var activeFilter;
 	// If we have active filter, append it to the query
@@ -34,7 +36,8 @@ var holdingsILS = {
 
 	    var data = {
 		ids : ids,
-		bibId : holdingsILS.bibId
+		bibId : holdingsILS.bibId,
+		next_item_token : nit
 	    };
 
 	    // Append the filter if any
@@ -52,7 +55,11 @@ var holdingsILS = {
 		    holdingsILS.processGetHoldingStatusesResponse(response);
 		},
 		error : function(msg) {
-		    console.error("async-holdingsils.js produced an error while doing AJAX:\n" + msg.toSource());
+		    
+		    if (typeof msg === "object" && typeof msg.toSource !== "undefined") // Only Mozilla can convert object to source string ..
+			msg = msg.toSource();
+		    
+		    console.error("async-holdingsils.js produced an error while doing AJAX:\n" + msg, arguments);
 		}
 	    })
 	}
@@ -103,7 +110,7 @@ var holdingsILS = {
 	    });
 
 	    if (data.remaining) {
-		holdingsILS.getHoldingStatuses(data.remaining);
+		holdingsILS.getHoldingStatuses(data.remaining, data.next_item_token);
 	    } else {
 		holdingsILS.getAllNotLoadedHoldings(true).each(function() {
 		    holdingsILS.updateHoldingId(this, data, true);
@@ -154,7 +161,7 @@ var holdingsILS = {
 	var availability = value.availability;
 
 	if (typeof availability !== 'undefined') {
-	    var availabilitySpan = statusDiv.children('span[data-type=availability]');
+	    var availabilitySpan = statusDiv.siblings('div[data-type=availability]').children('span');
 
 	    availabilitySpan.text(availability);
 	}
@@ -203,6 +210,18 @@ var holdingsILS = {
 	    var labelType = typeof value.label === 'undefined' ? 'label-success' : value.label;
 
 	    label.removeClass('label-primary').addClass(labelType);
+	}
+	
+	var collection = value.collection;
+	if (typeof collection !== 'undefined' && collection) {
+	    var collectionColumn = tableRow.children('td[data-type=collection]').first();
+	    collectionColumn.text(collection);
+	}
+	
+	var department = value.department;
+	if (typeof department !== 'undefined' && department) {
+	    var departmentColumn = tableRow.children('td[data-type=department]').first();
+	    departmentColumn.text(department);
 	}
 
 	tableRow.removeClass('loading').addClass('loaded');

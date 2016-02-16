@@ -2,6 +2,28 @@
 namespace CPK\Module\Configuration;
 
 $config = array(
+    'router' => [
+        'routes' => [
+            'default' => [
+                'type'    => 'Zend\Mvc\Router\Http\Segment',
+                'options' => [
+                    'route'    => '/[:controller[/[:action[/[:subaction[/[:param[/[:param2]]]]]]]]]',
+                    'constraints' => [
+                        'controller' => '[a-zA-Z][a-zA-Z0-9_-]*',
+                        'action'     => '[a-zA-Z][a-zA-Z0-9_-]*',
+                        'subaction'  => '[a-zA-Z][a-zA-Z0-9_-]*'
+                     ],
+                    'defaults' => [
+                        'controller' => 'index',
+                        'action'     => 'Home',
+                        'subaction'  => 'default',
+                        'param'      => 'default',
+                        'param2'     => 'default'
+                    ],
+                ],
+            ],
+        ],
+    ],
     'vufind' => array(
         'plugin_managers' => array(
             'recorddriver' => array(
@@ -37,7 +59,8 @@ $config = array(
                 'factories' => [
                     'user' => 'CPK\Db\Table\Factory::getUser',
                     'citationstyle' => 'CPK\Db\Table\Factory::getCitationStyle',
-                    'usersettings' => 'CPK\Db\Table\Factory::getUserSettings'                                
+                    'usersettings' => 'CPK\Db\Table\Factory::getUserSettings',
+                    'portalpages' => 'CPK\Db\Table\Factory::getPortalPages'
                 ], /* factories */
                 'invokables' => [
                     'session' => 'VuFind\Db\Table\Session'
@@ -100,14 +123,16 @@ $config = array(
     ), /* vufind */
     'controllers' => array(
         'factories' => array(
-            'record' => 'CPK\Controller\Factory::getRecordController'
+            'record' => 'CPK\Controller\Factory::getRecordController',
+            'portal' => 'CPK\Controller\Factory::getPortalController'
         ),
         'invokables' => array(
             'my-research' => 'CPK\Controller\MyResearchController',
             'librarycards' => 'CPK\Controller\LibraryCardsController',
             'search' => 'CPK\Controller\SearchController',
             'ajax' => 'CPK\Controller\AjaxController',
-            'status' => 'CPK\Controller\StatusController'
+            'status' => 'CPK\Controller\StatusController',
+            'admin' => 'CPK\Controller\AdminController'
         ), /* invokables */
     ), /* controllers */
     'controller_plugins' => [

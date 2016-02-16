@@ -35,6 +35,21 @@
 @import "parts/record";
 //contain styling for pages for signed-in users
 @import "parts/myresearch";
+//contain styling for admin
+@import "parts/admin";
+//contain styling for portal views
+@import "parts/portal";
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// Avoid showing horizontal scroolbar, when header and footer overflows on smaller desktops
+@media (min-width: @screen-lg-min) {
+  body {
+    overflow-x: hidden;
+    margin-left: -500px;
+    margin-right: -500px;
+  }
+}
 
 @brand-unknown: #9E9E9E;
 
@@ -44,9 +59,13 @@
   .label-variant(@label-unknown-bg);
 }
 
-a {
+a, .btn-link {
   cursor: pointer;
 }
+a:hover, a:focus, .btn-link:hover, .btn-link:focus {
+  text-decoration: none;
+}
+
 
 .form-control {
   &:focus {
@@ -65,4 +84,13 @@ a {
    margin-bottom: 20px;
 }
 
+.breadcrumb {
+    background-color: inherit;
+    margin-bottom: 10px;
+    padding: 0px 15px 5px 15px;
+}
 
+.btn-primary {
+  font-family: LatoWebHeavy;
+  text-transform: uppercase;
+}

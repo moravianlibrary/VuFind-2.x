@@ -8,6 +8,13 @@
   background-color: #666;
   color: white;
   padding: 4px;
+
+  //cookies are shown on bottom of browser window to avoid collision with header
+  position: fixed;
+  bottom: 0px;
+  left: 0px;
+  width: 100%;
+  z-index: 1030;
   & > a {
     color: white;
     text-decoration: underline;
@@ -16,25 +23,83 @@
 
 //header
 ////////
-header{
+
+.header-container {
+  .container-fixed();
+
+  @media (min-width: @screen-sm-min) {
+    width: @container-sm;
+  }
+  @media (min-width: @screen-md-min) {
+    width: @container-md;
+  }
+  @media (min-width: @screen-lg-min) {
+    width: 1440px;
+  }
+}
+
+
+header {
   margin-bottom: 20px;
+  background-color: #fff;
+  box-shadow: 2px 2px #ccc;
+  @media (min-width: @screen-lg-min) {
+    &.frontpage {
+      background-image: url("/themes/cpk-devel/images/book-colage.png");
+      // background-position: center;
+      height: 492px;
+    }
+  }
+  h1,h2,h3,h4 {
+    text-align: center;
+  }
+  & > .navbar {
+    padding-top: 30px;
+    padding-bottom: 30px;
+    #notif_icon {
+      padding-top: 14px;
+      padding-bottom: 13px;
+    }
+  }
+  .arrow-link {
+    font-size: 20px;
+    margin: 20px;
+  }
 }
-.navbar-inverse {
-  background-color: transparent;
-  border-color: transparent;
+
+
+//styling of knihovny.cz logo
+.navbar-brand {
+  padding: 0px;
+  //logo is in square, we have to set no overflow, to avoid overflowing
+  //outside the header
+  overflow: hidden;
+  div {
+    height: 50px;
+    i {
+      cursor: pointer;
+      color: inherit;
+    }
+  }
 }
-.navbar-nav > li > a {
-  font-weight: bold;
+
+//vertical line after knihovny.cz logo
+.navbar-header{
+  border-right: 1px solid rgb(204, 204, 204);
+  padding-right: 15px;
 }
-.navbar-right {
-  margin-top: 25px;
+
+.nav > li > a:hover, .nav > li > a:focus {
+  outline: none;
+  background-color: #fff;
 }
+
 .navbar{
   margin-bottom: 0px;
   border: none;
+  transition: width 500ms, background 500ms;
 }
 .navbar-brand {
-  margin-top: 8px;
   height: auto;
 }
 .beta-logo {
@@ -54,3 +119,7 @@ header{
   padding-bottom: 13px;
 }
 
+.full-width.navbar {
+  width:100%;
+  padding:0px;
+}

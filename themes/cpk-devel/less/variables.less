@@ -2,8 +2,8 @@
 @first-cpk-design-blue: #568FAB;
 
 @primary :              @brand-primary;
-@link-color:            @blue;
-@link-hover-color:      @blue;
+@link-color:            @brand-primary;
+@link-hover-color:      #222222;
 
 @border-radius-base:        0px;
 @border-radius-large:       0px;
@@ -17,22 +17,7 @@
 //
 //##
 
-// Inverted navbar
-// Reset inverted navbar basics
-@navbar-inverse-color:                      @white;
-@navbar-inverse-bg:                         @brand-primary;
-@navbar-inverse-border:                     @navbar-inverse-bg; //no border - border in same color as background
-
-// Inverted navbar links
-@navbar-inverse-link-color:                 @white;
-@navbar-inverse-link-hover-color:           @white;
-@navbar-inverse-link-hover-bg:              darken(@navbar-inverse-bg, 10%); //on hover darken background
-
-// Inverted navbar toggle
-@navbar-inverse-toggle-hover-bg:            darken(@navbar-inverse-bg, 10%);
-@navbar-inverse-toggle-icon-bar-bg:         @white;
-@navbar-inverse-toggle-border-color:        @white;
-
+@navbar-default-bg:                white;
 
 //== Breadcrumbs
 //
@@ -88,3 +73,25 @@
 // Bootstrap variables
 @body-bg: #EEEEEE;
 
+// Define the maximum width of `.container` for "large desktop" screen size
+@container-large-desktop:      (1220px + @grid-gutter-width);
+
+//minimum screen size for showing "large desktop" content
+@screen-lg-min:              1240px;
+
+//== Typography
+//
+@font-family-sans-serif:  LatoWeb;
+
+@font-size-base:          16px;
+@font-size-h1:            48px;
+h1, .h1 {
+  font-family: LatoWebBold;
+}
+
+@input-height-base:       46px;
+.form-control {
+  border: 2px solid @input-border;
+}
+
+@line-height-base:        1.875;

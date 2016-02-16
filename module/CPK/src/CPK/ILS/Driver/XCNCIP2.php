@@ -236,7 +236,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             $message = 'Problem recieved in XCNCIP2 Driver. Content:' .
                  str_replace('\n', '<br/>', $problem);
 
-            $this->addEnviromentalException($message);
+            //$this->addEnviromentalException($message); TODO must be moved to particular method
 
             throw new ILSException($message);
         }
@@ -274,24 +274,15 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
                     $request = $this->requests->cancelRequestItemUsingItemId($patron,
                         $recent);
-                    $response = $this->sendRequest($request);
-
-                    $problem = $this->useXPath($response,
-                        'NCIPMessage/CancelRequestItemResponse/Problem');
-
-                    if ($problem !== false && is_array($problem) &&
-                         count($problem) > 0) {
-                        $problemValue = $this->getFirstXPathMatchAsString(
-                            $problem[0], 'ProblemValue');
-                        $problemDetail = $this->getFirstXPathMatchAsString(
-                            $problem[0], 'ProblemDetail');
-
+                    try {
+                        $response = $this->sendRequest($request);
+                    } catch (ILSException $e) {
                         $problemOccurred = true;
+                        $problemValue = $e->getMessage();
                     }
 
-                    // $rawResponse = $response->asXML();
-
                     break;
+
                 } else
                     if ($hold['id'] == $recent) { // Biblio-leveled cancel request
 
@@ -308,32 +299,24 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
                         $request = $this->requests->cancelRequestItemUsingRequestId(
                             $patron, $request_id);
-                        $response = $this->sendRequest($request);
-
-                        $problem = $this->useXPath($response,
-                            'NCIPMessage/CancelRequestItemResponse/Problem');
-
-                        if ($problem !== false && is_array($problem) &&
-                             count($problem) > 0) {
-                            $problemValue = $this->getFirstXPathMatchAsString(
-                                $problem[0], 'ProblemValue');
-                            $problemDetail = $this->getFirstXPathMatchAsString(
-                                $problem[0], 'ProblemDetail');
-
+                        try {
+                            $response = $this->sendRequest($request);
+                        } catch (ILSException $e) {
                             $problemOccurred = true;
+                            $problemValue = $e->getMessage();
                         }
 
-                        // $rawResponse = $response->asXML();
                         break;
                     }
             }
 
             $didWeTheJob = $desiredRequestFound && ! $problemOccurred;
+            if (! $didWeTheJob) $this->addEnviromentalException("Item has not been canceled.");
 
             $items[$recent] = array(
                 'success' => $didWeTheJob,
                 'status' => '',
-                'sysMessage' => isset($problemValue) ?  : ''
+                'sysMessage' => isset($problemValue) ? $problemValue : ''
             );
         }
 
@@ -362,16 +345,23 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
         $result = array();
         foreach ($renewDetails['details'] as $item) {
-            $request = $this->requests->renewItem($patron, $item);
-            $response = $this->sendRequest($request);
-            $date = $this->useXPath($response, 'RenewItemResponse/DateForReturn');
-            $result[$item] = array(
-                'success' => true,
-                'new_date' => (string) $date[0],
-                'new_time' => (string) $date[0], // used the same like previous
-                'item_id' => $item,
-                'sysMessage' => ''
-            );
+            try {
+                $request = $this->requests->renewItem($patron, $item);
+                $response = $this->sendRequest($request);
+                $date = $this->useXPath($response, 'RenewItemResponse/DateForReturn');
+                $result[$item] = array(
+                    'success' => true,
+                    'new_date' => (string) $date[0],
+                    'new_time' => (string) $date[0], // used the same like previous
+                    'item_id' => $item,
+                    'sysMessage' => ''
+                );
+            } catch (ILSException $e) {
+                $result[$item] = array(
+                    'success' => false,
+                    'sysMessage' => 'renew_fail'
+                );
+            }
         }
         return array(
             'blocks' => false,
@@ -443,7 +433,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      */
     public function getCancelHoldDetails($holdDetails)
     {
-        return $holdDetails['item_id'];
+        return empty($holdDetails['item_id']) ? $holdDetails['id'] : $holdDetails['item_id'];
     }
 
     /**
@@ -625,8 +615,27 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
     public function getPickUpLocations($patron = null, $holdInformation = null)
     {
-        // FIXME
-        return array();
+        list ($patron['id'], $patron['agency']) = $this->splitAgencyId($patron['id']);
+        $request = $this->requests->lookupAgency($patron);
+        $response = $this->sendRequest($request);
+
+        $retVal = array();
+        $locations = $this->useXPath($response, 'LookupAgencyResponse/Ext/LocationName/LocationNameInstance');
+
+        foreach ($locations as $location) {
+            $id = $this->useXPath($location, 'LocationNameLevel');
+            $name = $this->useXPath($location, 'LocationNameValue');
+            $address = $this->useXPath($location,
+                    'Ext/PhysicalAddress/UnstructuredAddress/UnstructuredAddressData');
+            if (empty($id)) continue;
+
+            $retVal[] = array(
+                'locationID' => empty($id) ? '' : (string) $id[0],
+                'locationDisplay' => empty($name) ? '' : (string) $name[0],
+                'locationAddress' => empty($address) ? '' : (string) $address[0]
+            );
+        }
+        return $retVal;
     }
 
     public function getDefaultPickUpLocation($patron = null, $holdInformation = null)
@@ -681,29 +690,14 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             $status = (string) $this->useXPath($response,
                 'LookupItemResponse/ItemOptionalFields/CirculationStatus')[0];
 
-            // Pick out the permanent location (TODO: better smarts for dealing with
-            // temporary locations and multi-level location names):
-
-            $locationNameInstance = $this->useXPath($response,
-                'LookupItemResponse/ItemOptionalFields/Location/LocationName/LocationNameInstance');
-
-            foreach ($locationNameInstance as $recent) {
-                // FIXME: Create config to map location abbreviations of each institute into human readable values
-
-                $locationLevel = (string) $this->useXPath($recent,
-                    'LocationNameLevel')[0];
-
-                if ($locationLevel == 4) {
-                    $department = (string) $this->useXPath($recent,
-                        'LocationNameValue')[0];
-                } else
-                    if ($locationLevel == 3) {
-                        $sublibrary = (string) $this->useXPath($recent,
-                            'LocationNameValue')[0];
-                    } else {
-                        $locationInBuilding = (string) $this->useXPath($recent,
-                            'LocationNameValue')[0];
-                    }
+            $locations = $this->useXPath($response, 'LookupItemResponse/ItemOptionalFields/Location');
+            foreach ($locations as $locElement) {
+                $level = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameLevel');
+                $locationName = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameValue');
+                if (! empty($level)) {
+                    if ((string) $level[0] == '1') if (! empty($locationName)) $department = (string) $locationName[0];
+                    if ((string) $level[0] == '2') if (! empty($locationName)) $collection = (string) $locationName[0];
+                }
             }
 
             $numberOfPieces = (string) $this->useXPath($response,
@@ -714,24 +708,9 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
 
             $itemRestriction = (string) $this->useXPath($response,
                 'LookupItemResponse/ItemOptionalFields/ItemUseRestrictionType')[0];
-
-            // TODO Exists any clean way to get the due date without additional request?
-
-            if (! empty($locationInBuilding))
-                $onStock = substr($locationInBuilding, 0, 5) == 'Stock';
-            else
-                $onStock = false;
-
-            $onStock = true;
-
-            $restrictedToLibrary = ($itemRestriction == 'In Library Use Only');
-
-            $monthLoanPeriod = ($itemRestriction ==
-                 'Limited Circulation, Normal Loan Period') || empty(
-                    $itemRestriction);
-
-            // FIXME: Add link logic
-            $link = false;
+            $dueDate = $this->useXPath($response,
+                    'LookupItemResponse/ItemOptionalFields/DateDue');
+            $dueDate = $this->parseDate($dueDate);
 
             $label = $this->determineLabel($status);
 
@@ -739,16 +718,19 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'id' => empty($id) ? "" : $id,
                 'availability' => empty($itemRestriction) ? "" : $itemRestriction,
                 'status' => empty($status) ? "" : $status,
-                'location' => empty($locationInBuilding) ? "" : $locationInBuilding,
-                'sub_lib_desc' => empty($sublibrary) ? '' : $sublibrary,
-                'department' => empty($department) ? '' : $department,
+                'location' => '',
+                'sub_lib_desc' => '',
+                'collection' => isset($collection) ? $collection : '',
+                'department' => isset($department) ? $department : '',
                 'number' => empty($numberOfPieces) ? "" : $numberOfPieces,
                 'requests_placed' => empty($holdQueue) ? "" : $holdQueue,
                 'item_id' => empty($id) ? "" : $id,
                 'label' => $label,
                 'holdOverride' => "",
                 'addStorageRetrievalRequestLink' => "",
-                'addILLRequestLink' => ""
+                'addILLRequestLink' => "",
+                'addLink' => true, // TODO
+                'duedate' => empty($dueDate) ? '' : $dueDate
             );
         }
     }
@@ -764,14 +746,35 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
      * @throws ILSException
      * @return array Array of return values from getStatus.
      */
-    public function getStatuses($ids, $patron = [], $filter = [])
+    public function getStatuses($ids, $patron = [], $filter = [], $bibId = [], $nextItemToken = null)
     {
         $retVal = [];
 
+        if (empty($bibId)) $this->cannotUseLUIS = true;
         if ($this->cannotUseLUIS)
             // If we cannot use LUIS we will parse only the first one
             $retVal[] = $this->getStatus(reset($ids));
         else {
+            if ($this->agency === 'TAG001') {
+                $request = $this->requests->LUISBibItem($bibId, $nextItemToken, $this, $patron);
+                $response = $this->sendRequest($request);
+                return $this->handleStutuses($response);
+            }
+
+            if ($this->agency === 'ZLG001') {
+                $bibId = str_replace('oai:', '', $bibId);
+                $request = $this->requests->LUISBibItem($bibId, $nextItemToken, $this, $patron);
+                $response = $this->sendRequest($request);
+                return $this->handleStutusesZlg($response);
+            }
+
+            if ($this->agency === 'LIA001') {
+                $bibId = str_replace('LiUsCat_', 'li_us_cat*', $bibId);
+                $request = $this->requests->LUISBibItem($bibId, $nextItemToken, $this, $patron);
+                $response = $this->sendRequest($request);
+                return $this->handleStutusesZlg($response);
+            }
+
             $request = $this->requests->LUISItemId($ids, null, $this, $patron);
             $response = $this->sendRequest($request);
 
@@ -792,6 +795,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 if ($status == 'On Loan') {
                     $dueDate = $this->getFirstXPathMatchAsString($bibInfo,
                         'HoldingsSet/ItemInformation/ItemOptionalFields/DateDue');
+                    $dueDate = $this->parseDate($dueDate);
                 } else {
                     $dueDate = false;
                 }
@@ -854,9 +858,137 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                     'label' => $label,
                     'hold_type' => isset($holdQueue) && intval($holdQueue) > 0 ? 'Recall This' : 'Place a Hold',
                     'restrictions' => $restrictions,
-                    'due_date' => $dueDate
+                    'duedate' => empty($dueDate) ? '' : $dueDate
                 );
             }
+        }
+        return $retVal;
+    }
+
+    private function handleStutuses($response)
+    {
+        $retVal = array();
+
+        $bib_id = $this->useXPath($response,
+                'LookupItemSetResponse/BibInformation/BibliographicId/BibliographicItemId/BibliographicItemIdentifier');
+
+        $holdingSets = $this->useXPath($response, 'LookupItemSetResponse/BibInformation/HoldingsSet');
+        foreach ($holdingSets as $holdingSet) {
+            $department = '';
+
+            $item_id = $this->useXPath($holdingSet,
+                    'ItemInformation/ItemId/ItemIdentifierValue');
+
+            $status = $this->useXPath($holdingSet,
+                    'ItemInformation/ItemOptionalFields/CirculationStatus');
+
+            if (! empty($status) && (string) $status[0] == 'On Loan') {
+                $dueDate = $this->useXPath($holdingSet,
+                        'ItemInformation/DateDue');
+                $dueDate = $this->parseDate($dueDate);
+            } else {
+                $dueDate = false;
+            }
+
+            $holdQueue = $this->useXPath($holdingSet,
+                    'ItemInformation/ItemOptionalFields/HoldQueueLength');
+
+            $itemRestrictions = $this->useXPath($holdingSet,
+                    'ItemInformation/ItemOptionalFields/ItemUseRestrictionType');
+
+            $label = $this->determineLabel(empty($status) ? '' : (string) $status[0]);
+
+            $locations = $this->useXPath($holdingSet, 'ItemInformation/ItemOptionalFields/Location');
+            foreach ($locations as $locElement) {
+                $level = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameLevel');
+                $locationName = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameValue');
+                if (! empty($level)) {
+                    if ((string) $level[0] == '1') if (! empty($locationName)) $department = (string) $locationName[0];
+                }
+            }
+
+            $retVal[] = array(
+                'id' => empty($bib_id) ? "" : (string) $bib_id[0],
+                'status' => empty($status) ? "" : (string) $status[0],
+                'location' => '',
+                'sub_lib_desc' => '',
+                'department' => $department,
+                'requests_placed' => ! isset($holdQueue) ? "" : (string) $holdQueue[0],
+                'item_id' => empty($item_id) ? "" : (string) $item_id[0],
+                'label' => $label,
+                'hold_type' => isset($holdQueue) && intval($holdQueue) > 0 ? 'Recall This' : 'Place a Hold',
+                'restrictions' => '',
+                'duedate' => empty($dueDate) ? '' : $dueDate
+            );
+        }
+        return $retVal;
+    }
+
+    private function handleStutusesZlg($response)
+    {
+        $retVal = array();
+
+        $bib_id = $this->useXPath($response,
+                'LookupItemSetResponse/BibInformation/BibliographicId/BibliographicItemId/BibliographicItemIdentifier');
+
+        $nextItemToken = $this->useXPath($response, 'LookupItemSetResponse/NextItemToken');
+
+        $items = $this->useXPath($response, 'LookupItemSetResponse/BibInformation/HoldingsSet/ItemInformation');
+        foreach ($items as $itemInformation) {
+            $collection = '';
+            $department = '';
+
+            $item_id = $this->useXPath($itemInformation,
+                    'ItemId/ItemIdentifierValue');
+            if (empty($item_id)) { // this is for LIA
+                $item_id = $this->useXPath($itemInformation,
+                        'ItemOptionalFields/BibliographicDescription/ComponentId/ComponentIdentifier');
+            }
+
+            $status = $this->useXPath($itemInformation,
+                    'ItemOptionalFields/CirculationStatus');
+
+            if (! empty($status) && (string) $status[0] == 'On Loan') {
+                $dueDate = $this->useXPath($itemInformation,
+                        'ItemOptionalFields/DateDue');
+                $dueDate = $this->parseDate($dueDate);
+            } else {
+                $dueDate = false;
+            }
+
+            $holdQueue = $this->useXPath($itemInformation,
+                    'ItemOptionalFields/HoldQueueLength');
+
+            $itemRestrictions = $this->useXPath($itemInformation,
+                    'ItemOptionalFields/ItemUseRestrictionType');
+
+            $label = $this->determineLabel(empty($status) ? '' : (string) $status[0]);
+
+            $locations = $this->useXPath($itemInformation, 'ItemOptionalFields/Location');
+            foreach ($locations as $locElement) {
+                $level = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameLevel');
+                $locationName = $this->useXPath($locElement, 'LocationName/LocationNameInstance/LocationNameValue');
+                if (! empty($level)) {
+                    if ((string) $level[0] == '1') if (! empty($locationName)) $department = (string) $locationName[0];
+                    if ((string) $level[0] == '2') if (! empty($locationName)) $collection = (string) $locationName[0];
+                }
+            }
+
+            $retVal[] = array(
+                'id' => empty($bib_id) ? "" : (string) $bib_id[0],
+                'status' => empty($status) ? "" : (string) $status[0],
+                'location' => '',
+                'collection' => $collection,
+                'sub_lib_desc' => '',
+                'department' => $department,
+                'requests_placed' => ! isset($holdQueue) ? "" : (string) $holdQueue[0],
+                'item_id' => empty($item_id) ? "" : (string) $item_id[0],
+                'label' => $label,
+                'hold_type' => isset($holdQueue) && intval($holdQueue) > 0 ? 'Recall This' : 'Place a Hold',
+                'restrictions' => '',
+                'duedate' => empty($dueDate) ? '' : $dueDate,
+                'next_item_token' => empty($nextItemToken) ? '' : (string) $nextItemToken[0]
+            );
         }
         return $retVal;
     }
@@ -1034,12 +1166,14 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             $item_id = $this->getFirstXPathMatchAsString($current,
                 'ItemId/ItemIdentifierValue');
 
-            if (! $item_id)
-                throw new ILSException(
-                    "ItemIdentifierValue within ItemId is empty - cannot continue");
+            if (! $item_id) {
+                // MKP, in house loans (present loans) has no item_id
+                continue;
+            }
 
             $dateDue = $this->useXPath($current, 'DateDue');
-            $parsedDate = strtotime((string) $dateDue[0]);
+            $dueStatus =$this->hasOverdue($dateDue);
+            $dateDue = $this->parseDate($dateDue);
             $renewalNotPermitted = $this->useXPath($current, 'Ext/RenewalNotPermitted');
             $renewable = empty($renewalNotPermitted)? true : false;
             $additRequest = $this->requests->lookupItem($item_id, $patron['agency']);
@@ -1056,8 +1190,6 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 $title = $this->useXPath($current, 'Title');
             $mediumType = $this->useXPath($additResponse,
                 'LookupItemResponse/ItemOptionalFields/BibliographicDescription/MediumType');
-
-            $dateDue = date('j. n. Y', $parsedDate);
 
             $retVal[] = array(
                 'cat_username' => $patron['cat_username'],
@@ -1080,7 +1212,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'oclc' => '',
                 'upc' => '',
                 'borrowingLocation' => '',
-                'loan_id' => $item_id
+                'loan_id' => $item_id,
+                'dueStatus' => $dueStatus
             );
         }
         return $retVal;
@@ -1109,18 +1242,24 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             'LookupUserResponse/UserFiscalAccount/AccountBalance/MonetaryValue');
 
         $fines = array();
+        $sum = 0;
         foreach ($list as $current) {
             $amount = $this->useXPath($current,
                 'FiscalTransactionInformation/Amount/MonetaryValue');
+            $action = $this->useXPath($current,
+                    'FiscalTransactionInformation/FiscalActionType');
             $type = $this->useXPath($current,
                 'FiscalTransactionInformation/FiscalTransactionType');
             $date = $this->useXPath($current, 'AccrualDate');
             $desc = $this->useXPath($current,
                 'FiscalTransactionInformation/FiscalTransactionDescription');
-            $parsedDate = strtotime((string) $date[0]);
-            $date = date('j. n. Y', $parsedDate);
+            $item_id = $this->useXPath($current, 'FiscalTransactionInformation/ItemDetails/ItemId/ItemIdentifierValue');
+            $date = $this->parseDate($date);
             $amount_int = (int) $amount[0] * (- 1);
             $sum += $amount_int;
+
+            if ($this->agency == 'ZLG001') $desc = $action;
+            if (empty($desc)) $desc = $type;
 
             $fines[] = array(
                 'amount' => (string) $amount_int,
@@ -1158,7 +1297,9 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         $list = $this->useXPath($response, 'LookupUserResponse/RequestedItem');
 
         foreach ($list as $current) {
+            $cannotCancel = false;
             $type = $this->useXPath($current, 'RequestType');
+            $requestStatusType = $this->useXPath($current, 'RequestStatusType');
             $id = $this->useXPath($current,
                 'BibliographicId/BibliographicItemId/BibliographicItemIdentifier');
             $location = $this->useXPath($current, 'PickupLocation');
@@ -1168,17 +1309,52 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             $position = $this->useXPath($current, 'HoldQueuePosition');
             $item_id = $this->useXPath($current, 'ItemId/ItemIdentifierValue');
             $title = $this->useXPath($current, 'Title');
+            $extTitle = $this->useXPath($current, 'Ext/BibliographicDescription/Title');
 
             // Deal with Zlin.
             if (empty($id)) $id = $this->useXPath($current,
                     'Ext/BibliographicDescription/BibliographicItemId/BibliographicItemIdentifier');
-            if (empty($title)) $title = $this->useXPath($current, 'Ext/BibliographicDescription/Title');
+            if (empty($title)) $title = $extTitle;
+            if ($this->agency === 'ZLG001') {
+                // $type == 'Hold' => rezervace; $type == 'Loan' => objednavka
+            }
 
+            // Deal with Liberec.
+            if (empty($position)) $position = $this->useXPath($current,
+                    'Ext/HoldQueueLength');
+            if ($this->agency === 'LIA001') {
+                $title = $extTitle; // TODO temporary solution for periodics
+                if ((! empty($type)) && ((string) $type[0] == 'w')) $cannotCancel = true;
+            }
+
+            // Deal with Tabor.
+            if ($this->agency === 'TAG001') {
+                // $type == 'Hold' => rezervace; $type == 'Stack Retrieval' => objednavka
+                if (empty($expire)) $expire = $this->useXPath($current,
+                        'Ext/NeedBeforeDate');
+                if ((! empty($type)) && ((string) $type[0] == 'Stack Retrieval')) {
+                    $cannotCancel = true;
+                    $position = null; // hide queue position
+                }
+            }
+
+            if (! empty($position)) if ((string) $position[0] === '0') $position = null; // hide queue position
             $bib_id = empty($id) ? null : explode('-', (string) $id[0])[0];
-            $parsedDate = empty($create) ? '' : strtotime($create[0]);
-            $create = date('j. n. Y', $parsedDate);
-            $parsedDate = empty($expire) ? '' : strtotime($expire[0]);
-            $expire = date('j. n. Y', $parsedDate);
+            if ($this->agency === 'LIA001') { // change record prefix for kvkl
+                $bib_id = str_replace('li_us_cat*', 'LiUsCat_', $bib_id);
+            }
+            if ($this->agency === 'ZLG001') { // add record prefix for kfbz
+                $bib_id = 'oai:' . $bib_id;
+            }
+            $create = $this->parseDate($create);
+            $expire = $this->parseDate($expire);
+
+            $available = false;
+            if ((! empty($requestStatusType)) &&
+                        ((string) $requestStatusType[0] == 'Available For Pickup')) {
+                $available = true;
+                $cannotCancel = true;
+            }
 
             $retVal[] = array(
                 'type' => empty($type) ? '' : (string) $type[0],
@@ -1187,8 +1363,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'reqnum' => empty($reqnum) ? '' : (string) $reqnum[0],
                 'expire' => empty($expire) ? '' : $expire,
                 'create' => empty($create) ? '' : $create,
-                'position' => empty($position) ? '' : (string) $position[0],
-                'available' => false, // true means item is ready for check out
+                'position' => empty($position) ? null : (string) $position[0],
+                'available' => $available, // true means item is ready for check out
                 'item_id' => empty($item_id) ? '' : (string) $item_id[0],
                 'barcode' => empty($item_id) ? '' : (string) $item_id[0],
                 'volume' => '',
@@ -1197,7 +1373,8 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
                 'isbn' => '',
                 'issn' => '',
                 'oclc' => '',
-                'upc' => ''
+                'upc' => '',
+                'cannotcancel' => $cannotCancel
             );
         }
         return $retVal;
@@ -1255,8 +1432,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         $rawExpire = $this->useXPath($response,
             'LookupUserResponse/UserOptionalFields/UserPrivilege/ValidToDate');
 
-        $expireDate = empty($rawExpire) ? '' : date('j. n. Y',
-            strtotime((string) $rawExpire[0]));
+        $expireDate = $this->parseDate($rawExpire);
 
         $blocksParsed = $this->useXPath($response,
             'LookupUserResponse/UserOptionalFields/BlockOrTrap/BlockOrTrapType');
@@ -1624,5 +1800,20 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
             return $agencyId . static::AGENCY_ID_DELIMITER . $id;
         else
             return $id;
+    }
+
+    protected function parseDate($date)
+    {
+        $parsedDate = empty($date) ? '' : strtotime($date[0]);
+        $formattedDate = date('j. n. Y', $parsedDate);
+        return $formattedDate;
+    }
+
+    protected function hasOverdue($dateDue)
+    {
+        $parsedDate = empty($dateDue) ? '' : strtotime($dateDue[0]);
+        $today_time = strtotime(date("Y-m-d"));
+        $expire_time = strtotime(date('Y-m-d', $parsedDate));
+        return ($expire_time < $today_time) ? 'overdue' : false;
     }
 }
