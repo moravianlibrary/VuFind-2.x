@@ -39,7 +39,6 @@
 	})
 </script>
 
-<ul class="breadcrumb hidden-print"><?=$this->layout()->breadcrumbs ?></ul>
 <? if (isset($this->scrollData) && ($this->scrollData['previousRecord'] || $this->scrollData['nextRecord'])): ?>
   <ul class="pager hidden-print">
     <? if ($this->scrollData['previousRecord']): ?>
@@ -85,11 +84,11 @@
 			  <div id='citation-style-selector'>
 			    <select class='style' id='record_<?=$id?>'>
 			      <? foreach($this->availableCitationStyles as $style): ?>
-			      <option value='<?=$style['value']?>'<?= ($style['value'] === $this->selectedCitationStyle) ? 'selected="selected"' : '' ?>><?=$style['description']?></option>
+			      <option value='<?=$style['value']?>'<?= ($style['value'] == $this->selectedCitationStyle) ? 'selected="selected"' : '' ?>><?=$style['description']?></option>
 			      <? endforeach; ?>
 			    </select>
 			    <a href="http://www.citacepro.com/nacist-dokument-sysno/<?=$id?>?katalog=cpk" target="_blank">
-			      <img src="http://www.citacepro.com/logoCitacePROkatalog.png" alt="Citace PRO">
+			      <img src="/themes/cpk-devel/images/logoCitacePROkatalog.png" alt="Citace PRO">
 			    </a>
 			  </div>      
 		  </div>    	
@@ -99,8 +98,26 @@
         </div>
       </div>
     </div>
-			<?= $this->render('RecordDriver/SolrDefault/records-in-groups.phtml'); ?>
+    
+    <!-- Modal -->
+    <div class="modal fade" id="permalinkModal" tabindex="-1" role="dialog" aria-labelledby="permalinkLabel">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title" id="permalinkLabel"><?=$this->translate('Permalink')?></h4>
+          </div>
+          <div class="modal-body">
+            <p><?=htmlspecialchars("https://".$_SERVER['SERVER_NAME']."/Record/".$id)?></p>     
+		  </div>    	
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal"><?=$this->translate('close')?></button>
+          </div>
+        </div>
+      </div>
+    </div>
 			<?=$this->record($this->driver)->getCoreMetadata()?>
+			<?= $this->render('RecordDriver/SolrDefault/records-in-groups.phtml'); ?>
 			<div class="well">
             <? if (count($this->tabs) > 0): ?>
               <a name="tabnav"></a>
@@ -134,6 +151,56 @@
             
                 <?=$this->driver->supportsCoinsOpenURL()?'<span class="Z3988" title="'.$this->escapeHtmlAttr($this->driver->getCoinsOpenURL()).'"></span>':''?>
             </div>
+            
+            <!-- Modal -->
+                <div class="modal fade" id="subjectsModal" tabindex="-1" role="dialog" aria-labelledby="subjectsLabel">
+                  <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="subjectsLabel"><?=$this->translate('Subjects')?></h4>
+                      </div>
+                      <div class="modal-body">
+                        <div class='subjects-scrollable'>
+                          <? $subjects = $this->driver->getAllSubjectHeadings(); if (!empty($subjects)): ?>
+                              <? foreach ($subjects as $field): ?>
+                              <div class="subjectLine" property="keywords">
+                                <? $subject = ''; ?>
+                                <? if(count($field) == 1) $field = explode('--', is_array($field) ? $field[0] : $field); ?>
+                                <? $i = 0; foreach ($field as $subfield): ?>
+                                  <?=($i++ == 0) ? '' : ' &gt; '?>
+                                  <? $subject = trim($subfield); ?>
+                                  <a title="<?=$this->escapeHtmlAttr($subject)?>" href="<?=$this->record($this->driver)->getLink('subject', $subject)?>"><?=trim($this->escapeHtml($subfield))?></a>
+                                <? endforeach; ?>
+                              </div>
+                              <? endforeach; ?>
+                          <? endif; ?>  
+                        </div>
+            		  </div>    	
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal"><?=$this->translate('close')?></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+             <!-- Modal -->
+                <div class="modal fade" id="mailRecordModal" tabindex="-1" role="dialog" aria-labelledby="mailRecordLabel">
+                  <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        <h4 class="modal-title" id="mailRecordLabel"><?=$this->translate('Email this Search')?></h4>
+                      </div>
+                      <div class="modal-body">
+                        <?=$this->context($this)->renderInContext('record/email.phtml', [])?>
+            		  </div>    	
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal"><?=$this->translate('close')?></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
          
             <script src="/themes/cpk-devel/js/ajax-record-tabs.js"></script>
             <script>
@@ -182,6 +249,10 @@
             		}
             
             	});
+
+            	$( '#subjects-tr' ).on('click', '#show-all-subjects', function(){
+            		$( '#subjectsModal' ).modal( 'show' );
+            	});
             
             });
             </script>
@@ -196,3 +267,4 @@
 </div>
 
 <?=$this->inlineScript(\Zend\View\Helper\HeadScript::SCRIPT, '$(document).ready(recordDocReady);', 'SET'); ?>
+

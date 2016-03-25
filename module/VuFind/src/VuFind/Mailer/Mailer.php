@@ -69,7 +69,10 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
      *
      * @param \Zend\Mail\Transport\TransportInterface $transport Mail transport
      */
-    public function __construct(\Zend\Mail\Transport\TransportInterface $transport, \Zend\Config\Config $config)
+    public function __construct(
+        \Zend\Mail\Transport\TransportInterface $transport,
+        \Zend\Config\Config $config
+    )
     {
         $this->setTransport($transport);
         if (isset($config->Mail->from)) {
@@ -140,16 +143,23 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
     /**
      * Send an email message.
      *
-     * @param string $to      Recipient email address (or delimited list)
-     * @param string $from    Sender email address
-     * @param string $subject Subject line for message
-     * @param string $body    Message body
-     * @param string $cc      CC recipient (null for none)
+     * @param string                    $to        Recipient email address 
+     * (or delimited list)
+     * @param string|\Zend\Mail\Address $from      Sender email address
+     * @param string                    $subject   Subject line for message
+     * @param string                    $body      Message body
+     * @param string                    $cc        CC recipient (null for none)
      *
      * @throws MailException
      * @return void
      */
-    public function send($to, $from, $subject, $body, $cc = null)
+    public function send(
+        $to,
+        $from,
+        $subject,
+        $body,
+        $cc = null
+    )
     {
         $recipients = $this->stringToAddressList($to);
 
@@ -168,23 +178,27 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
                 throw new MailException('Invalid Recipient Email Address');
             }
         }
-        if (!$validator->isValid($from)) {
-            throw new MailException('Invalid Sender Email Address');
+        
+        if ($from instanceof \Zend\Mail\Address) {
+            $fromEmail = $from->getEmail();
+            $fromName = $from->getName();
+        } else {
+            $fromEmail = $from;
+            $fromName = null;
         }
 
+        if (!$validator->isValid($fromEmail)) {
+            throw new MailException('Invalid Sender Email Address');
+        }
         // Convert all exceptions thrown by mailer into MailException objects:
         try {
             // Send message
             $message = $this->getNewMessage()
                 ->addTo($to)
                 ->setBody($body)
-                ->setSubject($subject);
-            if ($this->from == null) {
-                $message->addFrom($from);
-            } else {
-                $message->setReplyTo($from);
-                $message->addFrom($this->from);
-            }
+                ->setSubject($subject)
+                ->setReplyTo($from)
+                ->addFrom($fromEmail, $fromName);
             if ($cc !== null) {
                 $message->addCc($cc);
             }
@@ -198,7 +212,7 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
      * Send an email message representing a link.
      *
      * @param string                          $to      Recipient email address
-     * @param string                          $from    Sender email address
+     * @param string|\Zend\Mail\Address       $from    Sender email address
      * @param string                          $msg     User notes to include in
      * message
      * @param string                          $url     URL to share
@@ -216,10 +230,15 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
         if (null === $subject) {
             $subject = $this->getDefaultLinkSubject();
         }
+        
+        $fromEmail = ($from instanceof \Zend\Mail\Address)
+        ? $from->getEmail()
+        : $from;
+        
         $body = $view->partial(
             'Email/share-link.phtml',
             [
-                'msgUrl' => $url, 'to' => $to, 'from' => $from, 'message' => $msg
+                'msgUrl' => $url, 'to' => $to, 'from' => $fromEmail, 'message' => $msg
             ]
         );
         return $this->send($to, $from, $subject, $body, $cc);
@@ -239,7 +258,7 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
      * Send an email message representing a record.
      *
      * @param string                            $to      Recipient email address
-     * @param string                            $from    Sender email address
+     * @param string|\Zend\Mail\Address         $from    Sender email address
      * @param string                            $msg     User notes to include in
      * message
      * @param \VuFind\RecordDriver\AbstractBase $record  Record being emailed
@@ -257,10 +276,15 @@ class Mailer implements \VuFind\I18n\Translator\TranslatorAwareInterface
         if (null === $subject) {
             $subject = $this->getDefaultRecordSubject($record);
         }
+        
+        $fromEmail = ($from instanceof \Zend\Mail\Address) 
+            ? $from->getEmail() 
+            : $from;
+        
         $body = $view->partial(
             'Email/record.phtml',
             [
-                'driver' => $record, 'to' => $to, 'from' => $from, 'message' => $msg
+                'driver' => $record, 'to' => $to, 'from' => $fromEmail, 'message' => $msg
             ]
         );
         return $this->send($to, $from, $subject, $body, $cc);

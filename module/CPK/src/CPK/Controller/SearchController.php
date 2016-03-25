@@ -35,6 +35,7 @@ use VuFind\Exception\Mail as MailException;
  */
 class SearchController extends AbstractSearch 
 {
+    
 	/**
 	 * Handle an advanced search
 	 *
@@ -142,9 +143,14 @@ class SearchController extends AbstractSearch
 	                // If we got this far, we're ready to send the email:
 	                $cc = $this->params()->fromPost('ccself') && $view->from != $view->to
 	                ? $view->from : null;
+	                $sender = new \Zend\Mail\Address(
+	                    $view->from,
+	                    $this->translate('Central Library Portal')
+	                );
 	                $mailer->sendLink(
-	                    $view->to, $view->from, $view->message,
-	                    $view->url, $this->getViewRenderer(), $view->subject, $cc
+	                    $view->to, $sender, $view->message,
+	                    $view->url, $this->getViewRenderer(), $view->subject, $cc,
+	                    $this->translate('Central Library Portal')
 	                    );
 	                $this->flashMessenger()->addMessage('email_success', 'success');
 	                return $this->redirect()->toUrl($view->url);
@@ -726,5 +732,230 @@ class SearchController extends AbstractSearch
             return [];
     }
     
+    /**
+     * Results action
+     * 
+     * @param array $postParams
+     *
+     * @return array
+     */
+    public function ajaxResultsAction(array $postParams)
+    {
+        $viewData = [];
+        $runner = $this->getServiceLocator()->get('VuFind\SearchRunner');
+        
+        // Send both GET and POST variables to search class:
+        $request = $this->getRequest()->getQuery()->toArray()
+        + $this->getRequest()->getPost()->toArray()
+        + $postParams;
+        
+        /* Set limit and sort */
+        $searchesConfig = $this->getConfig('searches');
+        $viewData['limit'] = (! empty($request['limit']))
+            ? $request['limit']
+            : $searchesConfig->General->default_limit;
+        $viewData['sort']  = (! empty($request['sort']))
+            ? $request['sort']
+            : $searchesConfig->General->default_sort;
+        
+        if (! empty($request['limit'])) {
+            $_SESSION['VuFind\Search\Solr\Options']['lastLimit'] = $request['limit'];
+        }
+        
+        if (! empty($request['sort'])) {
+            $_SESSION['VuFind\Search\Solr\Options']['lastSort'] = $request['sort'];
+        }
+        
+        // If user have preferred limit and sort settings
+        if ($user = $this->getAuthManager()->isLoggedIn()) {
+            $userSettingsTable = $this->getTable("usersettings");
+             
+            if (isset($_SESSION['VuFind\Search\Solr\Options']['lastLimit'])) {
+                $request['limit'] = $_SESSION['VuFind\Search\Solr\Options']['lastLimit'];
+            } else {
+                if (! empty($preferredRecordsPerPage)) {
+                    $request['limit'] = $userSettingsTable->getRecordsPerPage($user);
+                } else {
+                    $request['limit'] = $searchesConfig->General->default_limit;
+                }
+            }
+            $viewData['limit'] = $request['limit'];
+
+            if (isset($_SESSION['VuFind\Search\Solr\Options']['lastSort'])) {
+                $request['sort'] = $_SESSION['VuFind\Search\Solr\Options']['lastSort'];
+            } else {
+                if (! empty($preferredSorting)) {
+                    $request['sort'] = $userSettingsTable->getSorting($user);
+                } else {
+                    $request['sort'] = $searchesConfig->General->default_sort;
+                }
+            }
+            $viewData['sort'] = $request['sort'];
+        }
+
+        $_SESSION['VuFind\Search\Solr\Options']['lastLimit'] = $viewData['limit'];
+        $_SESSION['VuFind\Search\Solr\Options']['lastSort']  = $viewData['sort'];
+        /**/
+
+        $viewData['results'] = $results = $runner->run(
+            $request, $this->searchClassId, $this->getSearchSetupCallback()
+        );
+        $viewData['params'] = $results->getParams();
+
+        // If we received an EmptySet back, that indicates that the real search
+        // failed due to some kind of syntax error, and we should display a
+        // warning to the user; otherwise, we should proceed with normal post-search
+        // processing.
+        if ($results instanceof \VuFind\Search\EmptySet\Results) {
+            $viewData['parseError'] = true;
+        } else {
+            // If a "jumpto" parameter is set, deal with that now:
+            if ($jump = $this->processJumpTo($results)) {
+                return $jump;
+            }
+
+            // Remember the current URL as the last search.
+            try {
+                $this->rememberSearch($results);
+            } catch (\Exception $e) {
+                // ignore this Zend\Mvc\Exception\DomainException exception
+            }
+
+            // Add to search history:
+            $user = $this->getUser();
+            $sessId = $this->getServiceLocator()->get('VuFind\SessionManager')
+            ->getId();
+            $history = $this->getTable('Search');
+            $history->saveSearch(
+                $this->getResultsManager(), $results, $sessId,
+                $history->getSearches(
+                    $sessId, isset($user->id) ? $user->id : null
+                    )
+                );
+            
+            $searchId = $history->getLastInsertValue();
+            
+
+            // Set up results scroller:
+            if ($this->resultScrollerActive()) {
+                $this->resultScroller()->init($results);
+            }
+        }
+
+        // Search toolbar
+        $config = $this->getServiceLocator()->get('VuFind\Config')->get('config');
+        $viewData['showBulkOptions'] = isset($config->Site->showBulkOptions)
+        && $config->Site->showBulkOptions;
+	
+	    $viewData['myLibs'] = $this->getUsersHomeLibraries();
+	    $viewData['config'] = $this->getConfig();
+	
+	    $facetConfig = $this->getConfig('facets');
+	    $institutionsMappings = $facetConfig->InstitutionsMappings->toArray();
+	    $viewData['institutionsMappings'] = $institutionsMappings;
+	    
+	    $resultsHtml = $this->getResultListHtml($viewData);
+	    $sanitizedResultsHtml = htmlentities($resultsHtml, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, "UTF-8");
+	    
+	    $paginationHtml = $this->getPaginationHtml($viewData);
+	    
+	    $resultsAmountInfoHtml = $this->getResultsAmountInfoHtml($viewData);
+	    
+	    $sideFacets = $this->getSideFacetsHtml($viewData);
+	    
+	    $data = [
+            'viewData' => $viewData,
+	        'resultsHtml' => json_encode(['html' => $sanitizedResultsHtml]),
+            'paginationHtml' => json_encode(['html' => $paginationHtml]),
+            'resultsAmountInfoHtml' => json_encode(['html' => $resultsAmountInfoHtml]),
+            'searchId' => $searchId,
+	        'sideFacets' => json_encode(['html' => $sideFacets]),
+	    ];
+	    
+	    return $data;
+    }
     
+    /**
+     * Get search results list
+     * 
+     * @param array $viewData
+     *
+     * @return string
+     */
+    public function getResultListHtml(array $viewData)
+    {
+        $viewModel = $this->createViewModel();
+        $viewModel->setTemplate('search/list-list');
+    
+        foreach($viewData as $key => $data) {
+            $viewModel->$key = $data;
+        }
+    
+        $viewRender = $this->getServiceLocator()->get('ViewRenderer');
+        $html = $viewRender->render($viewModel);
+        return $html;
+    }
+    
+    /**
+     * Get pagination
+     *
+     * @param array $viewData
+     *
+     * @return string
+     */
+    public function getPaginationHtml(array $viewData)
+    {
+        $viewModel = $this->createViewModel();
+        $viewModel->setTemplate('search/ajax/pagination');
+    
+        foreach($viewData as $key => $data) {
+            $viewModel->$key = $data;
+        }
+    
+        $viewRender = $this->getServiceLocator()->get('ViewRenderer');
+        $html = $viewRender->render($viewModel);
+        return $html;
+    }
+    
+    /**
+     * Get results amount info
+     *
+     * @param array $viewData
+     *
+     * @return string
+     */
+    public function getResultsAmountInfoHtml(array $viewData)
+    {
+        $viewModel = $this->createViewModel();
+        $viewModel->setTemplate('search/ajax/resultsAmountInfo');
+    
+        foreach($viewData as $key => $data) {
+            $viewModel->$key = $data;
+        }
+    
+        $viewRender = $this->getServiceLocator()->get('ViewRenderer');
+        $html = $viewRender->render($viewModel);
+        return $html;
+    }
+    
+    /**
+     * Get side facets
+     *
+     * @param array $viewData
+     *
+     * @return string
+     */
+    public function getSideFacetsHtml(array $viewData)
+    {
+        $viewModel = $this->createViewModel();
+        $viewModel->setTemplate('search/ajax/facets');
+    
+        foreach($viewData as $key => $data) {
+            $viewModel->$key = $data;
+        }
+    
+        $viewRender = $this->getServiceLocator()->get('ViewRenderer');
+        $html = $viewRender->render($viewModel);
+        return $html;
+    }
 }

@@ -149,8 +149,8 @@ trait HoldsTrait
                 if (isset($results['success']) && $results['success'] == true) {
                     $msg = [
                         'html' => true,
-                        'source' => (isset($results['source'])) 
-                            ? $results['source'] 
+                        'source' => (isset($results['source']))
+                            ? $results['source']
                             : null,
                         'msg' => 'hold_place_success_html',
                         'tokens' => [
@@ -191,8 +191,9 @@ trait HoldsTrait
             $defaultPickup = false;
         }
         try {
-            $defaultRequestGroup = empty($requestGroups) ? false : $catalog->getDefaultRequestGroup(
-                $patron, $gatheredDetails);
+            $defaultRequestGroup = empty($requestGroups)
+                ? false
+                : $catalog->getDefaultRequestGroup($patron, $gatheredDetails);
         } catch (\Exception $e) {
             $defaultRequestGroup = false;
         }
@@ -203,6 +204,19 @@ trait HoldsTrait
 
         if (! empty($pickup))
             $extraHoldFields[] = 'pickUpLocation';
+
+        $status = $catalog->getItemStatus($gatheredDetails['item_id'], $gatheredDetails['id'], $patron['id']);
+
+        $holdQueue = null;
+        $holdDueDate = null;
+        if (isset($status['requests_placed']) && ! empty($status['requests_placed'])) {
+            $holdQueue = $status['requests_placed'] + 1;
+        }
+        if (isset($status['duedate'])) {
+            $holdDueDate = $status['duedate'];
+        }
+        if (empty($holdDueDate) && ($status['status'] == 'On Loan' || $status['status'] == 'On Order')) $holdDueDate = true;
+        if (empty($holdQueue) && ! empty($holdDueDate)) $holdQueue = 1;
 
         $view = $this->createViewModel(
             [
@@ -215,6 +229,8 @@ trait HoldsTrait
                 'requestGroups' => $requestGroups,
                 'defaultRequestGroup' => $defaultRequestGroup,
                 'requestGroupNeeded' => $requestGroupNeeded,
+                'holdQueue' => $holdQueue,
+                'holdDueDate' => $holdDueDate,
                 'helpText' => isset($checkHolds['helpText']) ? $checkHolds['helpText'] : null
             ]);
         $view->setTemplate('record/hold');

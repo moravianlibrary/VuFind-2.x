@@ -48,11 +48,13 @@ class Factory
      */
     public static function getAleph(ServiceManager $sm)
     {
+        $dbTablePluginManager = $sm->getServiceLocator()->get('VuFind\DbTablePluginManager');
+        
         return new Aleph(
             $sm->getServiceLocator()->get('VuFind\DateConverter'),
             $sm->getServiceLocator()->get('VuFind\CacheManager'),
             $sm->getServiceLocator()->get('VuFind\Search'),
-            $sm->getServiceLocator()->get('VuFind\DbTablePluginManager')->get('recordstatus')
+            $dbTablePluginManager->get('recordstatus')
         );
     }
 
@@ -65,6 +67,8 @@ class Factory
      */
     public static function getMultiBackend(ServiceManager $sm)
     {
+        $dbTablePluginManager = $sm->getServiceLocator()->get('VuFind\DbTablePluginManager');
+        
         return new MultiBackend(
             $sm->getServiceLocator()->get('VuFind\Config'),
             $sm->getServiceLocator()->get('VuFind\ILSAuthenticator'),

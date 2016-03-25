@@ -17,23 +17,27 @@
     var listNotEmptyDiv = undefined;
 
     function ListController($q, $log, $scope, storage, favsBroadcaster, Favorite) {
+	
+	var activeSorting = 'recent';
 
 	var vm = this;
 
 	vm.favSelected = {};
 	vm.favorites = [];
 
+	vm.sortVal = sortVal;
+	
 	vm.allSelected = false;
 
 	vm.listStart = 1;
 	vm.listLength = 1;
 
 	vm.selectAll = selectAll;
-	
-	vm.canSort = canSort;
+
 	vm.removeFavorite = removeFavorite;
 	
 	vm.removeSelected = removeSelected;
+	vm.printSelected = printSelected;
 	
 	$q.resolve(storage.getFavorites()).then(onGetFavorites).catch(function(reason) {
 	    
@@ -41,10 +45,10 @@
 	});
 	
 	/**
-	 * Public function about to be called from the favsBroadcaster when an event
-	 * happens (meaning adding / removal of the favorite)
+	 * Public function about to be called from the favsBroadcaster when an
+	 * event happens (meaning adding / removal of the favorite)
 	 */
-	window.__isFavCallback = function(isNew, favorite) {
+	window.__favChanged = function(isNew, favorite) {
 	    
 	    if (favorite instanceof Favorite)
 		
@@ -77,11 +81,13 @@
 		}
 	}; 
 	
-	return;
-	
-	//
+	return; //
 	
 	function onGetFavorites(favs) {
+	    
+	    // Default sorting is by most recent, so flip the order ..
+	    favs = favs.reverse();
+	    
 	    vm.favorites = favs;
 	    
 	    var length = favs.length;
@@ -91,10 +97,6 @@
 			
 		vm.listLength = length;			
 	    }
-	}
-	
-	function canSort(type) {
-	    return true; // TODO ..
 	}
 	
 	function removeFavorite(id) {
@@ -149,10 +151,48 @@
 	    });
 	}
 	
+	/**
+	 * Redirects user to /Records/Home action if selected something
+	 */
+	function printSelected() {
+	    
+	    var selectedIds = [];
+	    
+	    Object.keys(vm.favSelected).forEach(function(key) {
+		if (vm.favSelected[key] === true) {
+
+		    var id = getFavoriteId(key);
+		    
+		    selectedIds.push(id);
+		}
+	    });
+	    
+	    if (selectedIds.length === 0)
+		return;
+	    
+	    var printLocation = '/Records/Home?print=1';
+	    
+	    selectedIds.forEach(function(selectedId){
+		printLocation += '&id[]=Solr|' + selectedId;
+	    });
+	    
+	    // Open in new tab
+	    window.open(printLocation, '_blank').focus();
+	}
+	
 	function selectAll() {
 	    vm.favorites.forEach(function(favorite) {
 		vm.favSelected[favorite.created()] = vm.allSelected;
 	    });
+	}
+	
+	/**
+	 * Returns current sorting if no argument supplied.
+	 * 
+	 * Else sets the sorting provided & updates the view.
+	 */
+	function sortVal(val) {
+	    return arguments.length ? setSorting(val) : getSorting(); 
 	}
 	
 	// Private
@@ -169,6 +209,9 @@
 		
 		vm.favorites.push(favorite);
 		
+		// Apply current sorting
+		setSorting(getSorting());
+		
 		if (vm.favorites.length === 1) {
 		    changeVisibleDiv();
 		    
@@ -183,6 +226,68 @@
 	function changeVisibleDiv() {
 	    listEmptyDiv.hidden = ! listEmptyDiv.hidden;
 	    listNotEmptyDiv.hidden = ! listNotEmptyDiv.hidden;
+	}
+	
+	function setSorting(val) {
+	    
+	    // We need to refresh the view with async job .. use Promise
+	    new Promise(function(resolve, reject) {
+		
+		var validSorting = true;
+		
+		switch(val) {
+		
+		case 'alphabetical':
+		    
+		    vm.favorites.sort(function(a, b) {
+			return a.title() > b.title();
+		    });
+		    break;
+		    
+		case 'author':
+		    
+		    vm.favorites.sort(function(a, b) {
+			return a.author() > b.author();
+		    });
+		    break;
+		    
+		case 'recent':
+		    
+		    vm.favorites.sort(function(a, b) {
+			return a.created() < b.created();
+		    });
+		    break;
+		    
+		default:
+		    validSorting = false;
+		    $log.error('Invalid sorting provided');
+		}
+		
+		if (validSorting)
+		    activeSorting = val;
+		
+	    }).then($scope.$applyAsync);
+	    
+	}
+	
+	function getSorting() {
+	    return activeSorting;
+	}
+	
+	/**
+	 * Returns Solr ID of favorite identified by timestamp created
+	 * 
+	 * @param key
+	 */
+	function getFavoriteId(key) {
+	    var fav = vm.favorites.find(function(favorite) {
+		return favorite.created() === parseInt(key);
+	    });
+	    
+	    if (typeof fav === 'undefined')
+		return;
+	    
+	    return fav.titleLink().replace('/Record/', '');
 	}
     }
     

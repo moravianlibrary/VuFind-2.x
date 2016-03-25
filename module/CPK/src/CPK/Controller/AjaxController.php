@@ -21,7 +21,7 @@
  *
  * @category VuFind2
  * @package  Controller
- * @author   Chris Hallberg <challber@villanova.edu>
+ * @author   Martin Kravec <Martin.Kravec@mzk.cz>; Jiří Kozlovský <Jiri.Kozlovsky@mzk.cz>; Matúš Šabík <Matus.Sabik@mzk.cz>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link     http://vufind.org/wiki/vufind2:building_a_controller Wiki
  */
@@ -29,19 +29,10 @@ namespace CPK\Controller;
 
 use MZKCommon\Controller\AjaxController as AjaxControllerBase, VuFind\Exception\ILS as ILSException;
 
-/**
- * This controller handles global AJAX functionality
- *
- * @category VuFind2
- * @package Controller
- * @author Martin Kravec <Martin.Kravec@mzk.cz>
- * @license http://opensource.org/licenses/gpl-2.0.php GNU General Public License
- * @link http://vufind.org/wiki/vufind2:building_a_controller Wiki
- */
 class AjaxController extends AjaxControllerBase
-{
+{   
     use \VuFind\Db\Table\DbTableAwareTrait;
-
+    
     /**
      * Downloads SFX JIB content for current record.
      *
@@ -93,12 +84,11 @@ class AjaxController extends AjaxControllerBase
 
         if (substr($isn, 0, 1) === 'M') {
             $isnKey = "rft.ismn";
-        } else
-            if ((strlen($isn) === 8) or (strlen($isn) === 9)) {
-                $isnKey = "rft.issn";
-            } else { // (strlen($isn) === 10) OR (strlen($isn) === 13)
-                $isnKey = "rft.isbn";
-            }
+        } elseif ((strlen($isn) === 8) or (strlen($isn) === 9)) {
+            $isnKey = "rft.issn";
+        } else { // (strlen($isn) === 10) OR (strlen($isn) === 13)
+            $isnKey = "rft.isbn";
+        }
 
         $params = array(
             'ctx_ver' => 'Z39.88-2004',
@@ -205,11 +195,19 @@ class AjaxController extends AjaxControllerBase
 
             $itemsStatuses = [];
 
-            if (! empty($statuses)) $nextItemToken = $statuses[0]['next_item_token'];
-            else $nextItemToken = null;
+            if (! empty($statuses)) {
+                if (array_key_exists('next_item_token', $statuses[0])) $nextItemToken = $statuses[0]['next_item_token'];
+                else $nextItemToken = null;
+                if (array_key_exists('usedGetStatus', $statuses[0])) $usedGetStatus = $statuses[0]['usedGetStatus'];
+                else $usedGetStatus = null;
+                if (array_key_exists('usedAleph', $statuses[0])) $usedAleph = $statuses[0]['usedAleph'];
+                else $usedAleph = null;
+            }
+            else $nextItemToken = $usedGetStatus = $usedAleph = null;
 
             foreach ($statuses as $status) {
-                $id = $status['item_id'];
+                $unescId = $status['item_id'];
+                $id = str_replace(':', '\:', $status['item_id']);
 
                 $itemsStatuses[$id] = [];
 
@@ -228,9 +226,9 @@ class AjaxController extends AjaxControllerBase
                 if (! empty($status['duedate']))
                     $itemsStatuses[$id]['duedate'] = $status['duedate'];
 
-                if (! empty($status['holdtype']))
+                if (! empty($status['hold_type']))
                     $itemsStatuses[$id]['holdtype'] = $viewRend->transEsc(
-                        $status['holdtype']);
+                        $status['hold_type']);
 
                 if (! empty($status['label']))
                     $itemsStatuses[$id]['label'] = $status['label'];
@@ -248,15 +246,22 @@ class AjaxController extends AjaxControllerBase
                 if (! empty($status['department']))
                     $itemsStatuses[$id]['department'] = $status['department'];
 
-                $key = array_search($id, $ids);
+                $key = array_search(trim($unescId), $ids);
 
                 if ($key !== false)
                     unset($ids[$key]);
             }
 
-            if (isset($ids) && count($ids) > 0) {
+            if ($nextItemToken || $usedGetStatus || $usedAleph) {
                 $retVal['remaining'] = $ids;
                 $retVal['next_item_token'] = $nextItemToken;
+            }
+            else {
+               foreach ($ids as $id) {
+                   $itemsStatuses[$id]['availability'] = $viewRend->transEsc('availability_Not For Loan');
+                   $itemsStatuses[$id]['status'] = $viewRend->transEsc('status_Unknown Status');
+                   $itemsStatuses[$id]['label'] = 'label-unknown';
+               }
             }
 
             $retVal['statuses'] = $itemsStatuses;
@@ -430,6 +435,8 @@ class AjaxController extends AjaxControllerBase
                     'AJAX' => true
                 ]);
 
+            $cat_username = str_replace(':', '\:', $cat_username);
+
             $toRet = [
                 'html' => $html,
                 'obalky' => $obalky,
@@ -492,7 +499,6 @@ class AjaxController extends AjaxControllerBase
     {
         // Get the cat_username being requested
         $cat_username = $this->params()->fromPost('cat_username');
-
 
         $hasPermissions = $this->hasPermissions($cat_username);
 
@@ -575,6 +581,7 @@ class AjaxController extends AjaxControllerBase
                     'AJAX' => true
                 ]);
 
+            $cat_username = str_replace(':', '\:', $cat_username);
             $splitted_cat_username = explode('.', $cat_username);
 
             $toRet = [
@@ -594,6 +601,56 @@ class AjaxController extends AjaxControllerBase
                     'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
                 ],
                 self::STATUS_ERROR);
+    }
+
+    /**
+     * Fetches recent notifications.
+     *
+     * @return \Zend\Http\Response
+     */
+    public function getMyNotificationsAjax()
+    {
+        $cat_username = $this->params()->fromPost('cat_username');
+
+        // Check user's permissions
+        $hasPermissions = $this->hasPermissions($cat_username);
+
+        // Redirect if not authorized
+        if ($hasPermissions instanceof \Zend\Http\Response)
+            return $hasPermissions;
+
+        $notifHandler = $this->getServiceLocator()->get('CPK\NotificationsHandler');
+
+        // Check we have correct notifications handler
+        if (! $notifHandler instanceof \CPK\Notifications\NotificationsHandler) {
+
+            return $this->output([
+                'errors' => [
+                    'Did not found expected Notifications handler'
+                ],
+                'notifications' => []
+            ], self::STATUS_ERROR);
+        }
+
+        try {
+
+            $userNotifications = $notifHandler->getUserNotifications($cat_username);
+        } catch (\Exception $e) {
+
+            $userNotifications = [
+                'errors' => [
+                    $e->getMessage()
+                ],
+                'notifications' => [
+                    [
+                        'clazz' => 'warning',
+                        'message' => $e->getMessage()
+                    ]
+                ]
+            ];
+        }
+
+        return $this->output($userNotifications, self::STATUS_OK);
     }
 
     /**
@@ -655,82 +712,47 @@ class AjaxController extends AjaxControllerBase
         return $this->output($results, self::STATUS_OK);
     }
 
-    public function haveAnyOverdueAjax()
-    {
-            // Get the cat_username being requested
-        $cat_username = $this->params()->fromPost( 'cat_username' );
-
-        $hasPermissions = $this->hasPermissions( $cat_username );
-
-        if ($hasPermissions instanceof \Zend\Http\Response)
-            return $hasPermissions;
-
-        $ilsDriver = $this->getILS()->getDriver();
-
-        if ($ilsDriver instanceof \CPK\ILS\Driver\MultiBackend) {
-
-            $patron = [
-                'cat_username' => $cat_username,
-                'id' => $cat_username
-            ];
-
-            try {
-                // Try to get the profile ..
-                $result = $ilsDriver->getMyTransactions( $patron );
-            } catch (\Exception $e ) {
-                return $this->outputException( $e, $cat_username );
-            }
-
-            $showOverdueMessage = false;
-
-            foreach ( $result as $current ) {
-
-                $ilsDetails = $this->getDriverForILSRecord( $current )->getExtraDetail( 'ils_details' );
-
-                if (isset( $ilsDetails['dueStatus'] ) && $ilsDetails['dueStatus'] == "overdue") {
-                    $showOverdueMessage = true;
-                    break;
-                }
-            }
-
-            $source = explode( '.', $cat_username )[0];
-
-            $toRet = [
-                'overdue' => $showOverdueMessage,
-                'source' => $source
-            ];
-
-            return $this->output( $toRet, self::STATUS_OK );
-        } else
-            return $this->output(
-                    [
-                        'source' => $source,
-                        'cat_username' => $cat_username,
-                        'message' => 'ILS Driver isn\'t instanceof MultiBackend - ending job now.'
-                    ], self::STATUS_ERROR );
-    }
-
-    public function updateNotificationsReadAjax()
+    /**
+     * Updates read notifications related to user's identity
+     *
+     * @return \Zend\Http\Response
+     */
+    public function notificationReadAjax()
     {
             // Check user is logged in ..
         if (!$user = $this->getAuthManager()->isLoggedIn()) {
             return $this->output( 'You are not logged in.', self::STATUS_ERROR );
         }
 
-        $currentNotificationsRead = $this->params()->fromPost( 'curr_notifies_read' );
+        $notificationType = $this->params()->fromPost( 'notificationType' );
 
-        $encodedReadNotifications = json_encode( $currentNotificationsRead );
+        $notifHandler = $this->getServiceLocator()->get('CPK\NotificationsHandler');
 
-        if (strlen( $encodedReadNotifications ) > 512) {
-            return $this->output(
-                    $this->translate( 'JSON you want to store is longer than 512 chars!!' ), self::STATUS_ERROR );
+        // Check we have correct notifications handler
+        if (! $notifHandler instanceof \CPK\Notifications\NotificationsHandler) {
+
+            return $this->output([
+                'errors' => [
+                    'Did not found expected Notifications handler'
+                ],
+                'notifications' => []
+            ], self::STATUS_ERROR);
         }
 
-        // Just overwrite with current read notifications
-        $user->read_notifications = $encodedReadNotifications;
-        $user->save();
+        try {
 
-        return $this->output( "OK", self::STATUS_OK );
+            $notifHandler->setUserNotificationRead($user, $notificationType);
+        } catch (\Exception $e) {
+
+            $userNotifications = [
+                'errors' => [
+                    $e->getMessage()
+                ],
+                'notifications' => []
+            ];
+        }
+
+        return $this->output(null, self::STATUS_OK);
     }
 
     /**
@@ -1061,44 +1083,13 @@ class AjaxController extends AjaxControllerBase
         $query = $this->getRequest()->getQuery();
         $autocompleteManager = $this->getServiceLocator()
         ->get('CPK\AutocompletePluginManager');
+        $facetFilters = $this->params()->fromQuery('filters');
         return $this->output(
-            $autocompleteManager->getSuggestions($query), self::STATUS_OK
+            $autocompleteManager->getSuggestions(
+                $query, 'type', 'q', $facetFilters
+            ),
+            self::STATUS_OK
         );
-    }
-
-    /**
-     * Is citation available
-     *
-     * @return \Zend\Http\Response
-     */
-    public function isCitationAvailableAjax()
-    {
-        $recordId = $this->params()->fromPost('recordId');
-
-        $recordLoader = $this->getServiceLocator()->get('VuFind\RecordLoader');
-        $recordDriver = $recordLoader->load($recordId);
-
-        $parentRecordId = $recordDriver->getParentRecordId();
-        $parentRecordDriver = $recordLoader->load($parentRecordId);
-
-        $format = $parentRecordDriver->getRecordType();
-        if ($format === 'marc')
-            $format .= '21';
-        $recordXml = $parentRecordDriver->getXml($format);
-
-        if (strpos($recordXml, "datafield") === false)
-            return $this->output($statusCode, self::STATUS_ERROR);
-
-        $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
-            .$recordId;
-
-        $statusCode = get_headers($citationServerUrl)[0];
-
-        if ($statusCode === 'HTTP/1.1 200 OK') {
-            return $this->output($statusCode, self::STATUS_OK);
-        }
-
-        return $this->output($statusCode, self::STATUS_ERROR);
     }
 
     /**
@@ -1127,7 +1118,8 @@ class AjaxController extends AjaxControllerBase
 
         // Set preferred citation style
         if ($changedCitationValue == 'false') {
-            if (! $user = $this->getAuthManager()->isLoggedIn()) {
+            $user = $this->getAuthManager()->isLoggedIn();
+            if (! $user) {
                 $preferredCitationStyle = $this->getConfig()
                 ->Record->default_citation_style;
             } else {
@@ -1142,15 +1134,17 @@ class AjaxController extends AjaxControllerBase
             $preferredCitationStyle = $changedCitationValue;
         }
 
+        if ($preferredCitationStyle == null) {
+            $preferredCitationStyle = $this->getConfig()
+                ->Record->default_citation_style;
+        }
+
         $citationServerUrl = "https://www.citacepro.com/api/cpk/citace/"
             .$recordId
             ."?server=".$_SERVER['SERVER_NAME']
             ."&citacniStyl=".$preferredCitationStyle;
 
-        $statusCode = get_headers($citationServerUrl)[0];
-
-        if ($statusCode === 'HTTP/1.1 200 OK') {
-
+        try {
             $ch = curl_init($citationServerUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
@@ -1164,12 +1158,13 @@ class AjaxController extends AjaxControllerBase
 
             $results = $xpath->query('//*[@id="citace"]');
 
-            if (! empty($results)) {
-                $citation = $results->item(0)->nodeValue;
-
+            $citation = $results->item(0)->nodeValue;
+            if (! empty($citation)) {
                 return $this->output($citation, self::STATUS_OK);
             }
 
+        } catch (\Exception $e) {
+            return $this->output('false', self::STATUS_ERROR);
         }
 
         return $this->output('false', self::STATUS_ERROR);
@@ -1252,5 +1247,19 @@ class AjaxController extends AjaxControllerBase
         }
 
         return $this->output([], self::STATUS_OK);
+    }
+    
+    /**
+     * Return search results
+     *
+     * @return \Zend\Http\Response
+     */
+    public function updateSearchResultsAjax()
+    {
+        $postParams = $this->params()->fromPost();
+        $searchController = $this->getServiceLocator()->get('searchController');
+        $viewData = $searchController->ajaxResultsAction($postParams);
+
+        return $this->output($viewData, self::STATUS_OK);
     }
 }

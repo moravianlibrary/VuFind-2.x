@@ -24,4 +24,5 @@ local/beta_config_merge.sh
 public/.htaccess
 messages-beta.log
 conf
+compileMyCss.sh
 

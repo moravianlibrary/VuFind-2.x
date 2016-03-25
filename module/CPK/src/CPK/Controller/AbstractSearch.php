@@ -289,11 +289,13 @@ class AbstractSearch extends AbstractBase
             ? $request['sort'] 
             : $searchesConfig->General->default_sort;
         
-        if (! empty($request['limit']))
+        if (! empty($request['limit'])) {
             $_SESSION['VuFind\Search\Solr\Options']['lastLimit'] = $request['limit'];
+        }
         
-        if (! empty($request['sort']))
+        if (! empty($request['sort'])) {
             $_SESSION['VuFind\Search\Solr\Options']['lastSort'] = $request['sort'];
+        }
         
         // If user have preferred limit and sort settings
         if ($user = $this->getAuthManager()->isLoggedIn()) {
@@ -389,7 +391,7 @@ class AbstractSearch extends AbstractBase
 
         return $view;
     }
-
+    
     /**
      * Process the jumpto parameter -- either redirect to a specific record and
      * return view model, or ignore the parameter and return false.

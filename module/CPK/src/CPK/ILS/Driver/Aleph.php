@@ -44,6 +44,18 @@ class Aleph extends AlephBase
 
     protected $maxItemsParsed;
 
+    /**
+     *
+     * @var \CPK\Db\Table\AlephMappings
+     */
+    protected $alephMappingsTable;
+
+    /**
+     *
+     * @var object
+     */
+    protected $addressMappings;
+
     public function init()
     {
         parent::init();
@@ -67,6 +79,30 @@ class Aleph extends AlephBase
         if ($this->idResolver instanceof \VuFind\ILS\Driver\SolrIdResolver) {
             $this->idResolver = new SolrIdResolver($this->searchService, $this->config);
         }
+        
+        $this->addressMappings = $this->getDefaultMappings();
+        
+        if (isset($this->config['AddressMappings'])) {
+            foreach ($this->config['AddressMappings'] as $key => $val) {
+                $this->addressMappings[$key] = $val;
+            }
+        }
+        
+    }
+
+    protected function getDefaultMappings()
+    {
+        return [
+            'barcode' => null,
+            'fullname' => 'z304-address-1',
+            'street' => 'z304-address-2',
+            'city' => 'z304-address-3',
+            'zip' => 'z304-zip',
+            'email' => 'z304-email-address',
+            'phone' => 'z304-telephone-1',
+            'group' => 'z305-bor-status',
+            'expiration' => 'z305-expiry-date'
+        ];
     }
 
     /**
@@ -137,7 +173,23 @@ class Aleph extends AlephBase
 
     public function getMyProfile($user)
     {
-        $profile = parent::getMyProfile($user);
+        try {
+            if (!$this->alephWebService->isXServerEnabled()) {
+                $profile = $this->getMyProfileX($user);
+            } else {
+                $profile = $this->getMyProfileDLF($user);
+            }
+        } catch (\Exception $e) {
+            
+            $msg = $e->getMessage();
+            
+            /* TODO: Probably expired account ?
+             * message: XServer error: Error retrieving Patron System Key.
+             * or 2nd : ID čtenáře není platné
+             * or 3rd : The patron ID is invalid
+             */
+            throw $e;
+        }
         
         $blocks = [];
         $translatedBlock = '';
@@ -168,6 +220,179 @@ class Aleph extends AlephBase
         $profile['blocks'] = $blocks;
         
         return $profile;
+    }
+
+    /**
+     * Get profile information using X-server.
+     *
+     * @param array $user
+     *            The patron array
+     *            
+     * @throws ILSException
+     * @return array Array of the patron's profile data on success.
+     */
+    public function getMyProfileX($user)
+    {
+        $recordList = array();
+        if (! isset($user['college'])) {
+            $user['college'] = $this->useradm;
+        }
+        $xml = $this->alephWebService->doXRequest("bor-info", array(
+            'loans' => 'N',
+            'cash' => 'N',
+            'hold' => 'N',
+            'library' => $user['college'],
+            'bor_id' => $user['id']
+        ), true);
+        $id = (string) $xml->z303->{'z303-id'};
+        $address1 = (string) $xml->z304->{'z304-address-2'};
+        $address2 = (string) $xml->z304->{'z304-address-3'};
+        $zip = (string) $xml->z304->{'z304-zip'};
+        $phone = (string) $xml->z304->{'z304-telephone'};
+        $barcode = (string) $xml->z304->{'z304-address-0'};
+        $group = (string) $xml->z305->{'z305-bor-status'};
+        $expiry = (string) $xml->z305->{'z305-expiry-date'};
+        $credit_sum = (string) $xml->z305->{'z305-sum'};
+        $credit_sign = (string) $xml->z305->{'z305-credit-debit'};
+        $name = (string) $xml->z303->{'z303-name'};
+        if (strstr($name, ",")) {
+            list ($lastname, $firstname) = explode(",", $name);
+        } else {
+            $lastname = $name;
+            $firstname = "";
+        }
+        if ($credit_sign == null) {
+            $credit_sign = "C";
+        }
+        $recordList['firstname'] = $firstname;
+        $recordList['lastname'] = $lastname;
+        $recordList['cat_username'] = $user['id'];
+        if (isset($user['email'])) {
+            $recordList['email'] = $user['email'];
+        } else {
+            $recordList['email'] = (string) $xml->z304->{'z304-email-address'};
+        }
+        $recordList['address1'] = $address1;
+        $recordList['address2'] = $address2;
+        $recordList['zip'] = $zip;
+        $recordList['phone'] = $phone;
+        $recordList['group'] = $group;
+        $recordList['barcode'] = $barcode;
+        $recordList['expire'] = $this->parseDate($expiry);
+        $recordList['credit'] = $expiry;
+        $recordList['credit_sum'] = $credit_sum;
+        $recordList['credit_sign'] = $credit_sign;
+        $recordList['id'] = $id;
+        // deliquencies
+        $blocks = array();
+        foreach (array(
+            'z303-delinq-1',
+            'z303-delinq-2',
+            'z303-delinq-3'
+        ) as $elementName) {
+            $block = (string) $xml->z303->{$elementName};
+            if (! empty($block) && $block != '00') {
+                $blocks[] = $block;
+            }
+        }
+        foreach (array(
+            'z305-delinq-1',
+            'z305-delinq-2',
+            'z305-delinq-3'
+        ) as $elementName) {
+            $block = (string) $xml->z305->{$elementName};
+            if (! empty($block) && $block != '00') {
+                $blocks[] = $block;
+            }
+        }
+        $recordList['blocks'] = array_unique($blocks);
+        return $recordList;
+    }
+
+    /**
+     * Get profile information using DLF service.
+     *
+     * @param array $user
+     *            The patron array
+     *            
+     * @throws ILSException
+     * @return array Array of the patron's profile data on success.
+     */
+    public function getMyProfileDLF($user)
+    {
+        $xml = $this->alephWebService->doRestDLFRequest(array(
+            'patron',
+            $user['id'],
+            'patronInformation',
+            'address'
+        ));
+        
+        $addressInfo = $xml->{'address-information'};
+        
+        $fullname = (string) $addressInfo->{$this->addressMappings['fullname']};
+        $street = (string) $addressInfo->{$this->addressMappings['street']};
+        
+        $dateFrom = (string) $addressInfo->{'z304-date-from'};
+        $dateTo = (string) $addressInfo->{'z304-date-to'};
+        
+        if (! empty($this->addressMappings['barcode']))
+            $barcode = (string) $addressInfo->{$this->addressMappings['barcode']};
+        else
+            $barcode = (string) $addressInfo->{'z304-address-5'};
+        $city = (string) $addressInfo->{$this->addressMappings['city']};
+        
+        if (! empty($this->addressMappings['zip']))
+            $zip = (string) $addressInfo->{$this->addressMappings['zip']};
+        else
+            $zip = (string) $addressInfo->{'z304-zip'};
+        
+        if (! empty($this->addressMappings['email']))
+            $email = (string) $addressInfo->{$this->addressMappings['email']};
+        else
+            $email = (string) $addressInfo->{'z304-email-address'};
+        
+        if (! empty($this->addressMappings['phone']))
+            $phone = (string) $addressInfo->{$this->addressMappings['phone']};
+        else
+            $phone = (string) $addressInfo->{'z304-telephone-1'};
+        
+        if (strpos($fullname, ",") === false) {
+            $recordList['lastname'] = $fullname;
+            $recordList['firstname'] = "";
+        } else {
+            list ($recordList['lastname'], $recordList['firstname']) = explode(",", $fullname);
+        }
+        $recordList['address1'] = $street;
+        $recordList['address2'] = $city;
+        $recordList['barcode'] = $barcode;
+        $recordList['zip'] = $zip;
+        $recordList['phone'] = $phone;
+        $recordList['email'] = $email;
+        $recordList['addressValidFrom'] = $this->parseDate($dateFrom);
+        $recordList['addressValidTo'] = $this->parseDate($dateTo);
+        $recordList['id'] = $user['id'];
+        $recordList['cat_username'] = $user['id'];
+        $xml = $this->alephWebService->doRestDLFRequest(array(
+            'patron',
+            $user['id'],
+            'patronStatus',
+            'registration'
+        ));
+        $institution = $xml->{'registration'}->{'institution'};
+        
+        if (! empty($this->addressMappings['group']))
+            $status = (string) $institution->{$this->addressMappings['group']};
+        else
+            $status = (string) $institution->{'z305-bor-status'};
+        
+        if (! empty($this->addressMappings['expiration']))
+            $expiry = (string) $institution->{$this->addressMappings['expiration']};
+        else
+            $expiry = (string) $institution->{'z305-expiry-date'};
+        
+        $recordList['expire'] = $this->parseDate($expiry);
+        $recordList['group'] = $status;
+        return $recordList;
     }
 
     public function getMyTransactions($user, $history = false, $limit = 0)
@@ -341,7 +566,7 @@ class Aleph extends AlephBase
                 }
             }
         } else 
-            if (! $available && ($status == "On Hold" || $status == "Requested")) {
+            if (! $available && ($status == "On Hold" || $status == "Requested" || $status == "Požadováno")) {
                 $duedate_status = "requested";
             }
         
@@ -371,6 +596,9 @@ class Aleph extends AlephBase
                 $status = 'available';
                 $holdType = 'Place a Hold';
                 $label = 'label-success';
+            } elseif ($duedate_status = "requested") {
+                $label = 'label-warning';
+                $status = 'On Order';
             } else {
                 $label = 'label-danger';
                 $status = 'unavailable';
@@ -409,89 +637,92 @@ class Aleph extends AlephBase
     }
 
     /**
-     * Get profile information using X-server.
+     * Support method for placeHold -- get holding info for an item.
      *
-     * @param array $user
-     *            The patron array
+     * @param string $id
+     *            Item ID
+     * @param string $bibId
+     *            Bib ID
+     * @param string $patronId
+     *            Patron ID
      *            
-     * @throws ILSException
-     * @return array Array of the patron's profile data on success.
+     * @return array
      */
-    public function getMyProfileX($user)
+    public function getItemStatus($id, $bibId, $patronId)
     {
-        $recordList = array();
-        if (! isset($user['college'])) {
-            $user['college'] = $this->useradm;
+        $holding = array();
+        $bibId = str_replace("-", "", $bibId);
+        $params = array();
+        $params['view'] = 'full';
+        $params['patron'] = $patronId;
+        $xml = $this->alephWebService->doRestDLFRequest(array(
+            'patron',
+            $patronId,
+            'record',
+            $bibId,
+            'items',
+            $id
+        ), $params);
+        if (! isset($xml->{'item'})) {
+            return $holding;
         }
-        $xml = $this->alephWebService->doXRequest("bor-info", array(
-            'loans' => 'N',
-            'cash' => 'N',
-            'hold' => 'N',
-            'library' => $user['college'],
-            'bor_id' => $user['id']
-        ), true);
-        $id = (string) $xml->z303->{'z303-id'};
-        $address1 = (string) $xml->z304->{'z304-address-2'};
-        $address2 = (string) $xml->z304->{'z304-address-3'};
-        $zip = (string) $xml->z304->{'z304-zip'};
-        $phone = (string) $xml->z304->{'z304-telephone'};
-        $barcode = (string) $xml->z304->{'z304-address-0'};
-        $group = (string) $xml->z305->{'z305-bor-status'};
-        $expiry = (string) $xml->z305->{'z305-expiry-date'};
-        $credit_sum = (string) $xml->z305->{'z305-sum'};
-        $credit_sign = (string) $xml->z305->{'z305-credit-debit'};
-        $name = (string) $xml->z303->{'z303-name'};
-        if (strstr($name, ",")) {
-            list ($lastname, $firstname) = explode(",", $name);
-        } else {
-            $lastname = $name;
-            $firstname = "";
-        }
-        if ($credit_sign == null) {
-            $credit_sign = "C";
-        }
-        $recordList['firstname'] = $firstname;
-        $recordList['lastname'] = $lastname;
-        $recordList['cat_username'] = $user['id'];
-        if (isset($user['email'])) {
-            $recordList['email'] = $user['email'];
-        } else {
-            $recordList['email'] = (string) $xml->z304->{'z304-email-address'};
-        }
-        $recordList['address1'] = $address1;
-        $recordList['address2'] = $address2;
-        $recordList['zip'] = $zip;
-        $recordList['phone'] = $phone;
-        $recordList['group'] = $group;
-        $recordList['barcode'] = $barcode;
-        $recordList['expire'] = $this->parseDate($expiry);
-        $recordList['credit'] = $expiry;
-        $recordList['credit_sum'] = $credit_sum;
-        $recordList['credit_sign'] = $credit_sign;
-        $recordList['id'] = $id;
-        // deliquencies
-        $blocks = array();
-        foreach (array(
-            'z303-delinq-1',
-            'z303-delinq-2',
-            'z303-delinq-3'
-        ) as $elementName) {
-            $block = (string) $xml->z303->{$elementName};
-            if (! empty($block) && $block != '00') {
-                $blocks[] = $block;
+        $item = $xml->{'item'};
+        $duedate = null;
+        $status = (string) $item->{'status'};
+        $matches = [];
+        if (preg_match("/([0-9]*\\/[a-zA-Z0-9]*\\/[0-9]*);([a-zA-Z ]*)/", $status, $matches)) {
+            $duedate = $this->parseDate($matches[1]);
+        } else 
+            if (preg_match("/([0-9]*\\/[a-zA-Z0-9]*\\/[0-9]*)/", $status, $matches)) {
+                $duedate = $this->parseDate($matches[1]);
             }
+        $requests = 0;
+        $str = $xml->xpath('//item/queue/text()');
+        $matches = [];
+        if ($str != null && preg_match("/(\d) .+ (\d) [\w]+/", $str[0], $matches)) {
+            $requests = $matches[1];
         }
-        foreach (array(
-            'z305-delinq-1',
-            'z305-delinq-2',
-            'z305-delinq-3'
-        ) as $elementName) {
-            $block = (string) $xml->z305->{$elementName};
-            if (! empty($block) && $block != '00') {
-                $blocks[] = $block;
-            }
+        $retStatus = null;
+        if (preg_match("/(Requested|Požadováno)/", $status, $matches)) {
+            $retStatus = 'On Order';
         }
-        $recordList['blocks'] = array_unique($blocks);
-        return $recordList;
+        $holding = [
+            'id' => $bibId,
+            'item_id' => $id,
+            'duedate' => (string) $duedate,
+            'requests_placed' => $requests,
+            'status' => $retStatus
+        ];
+        return $holding;
+    }
+
+    /**
+     * Parse a date.
+     *
+     * @param string $date
+     *            Date to parse
+     *            
+     * @return string
+     */
+    public function parseDate($date)
+    {
+        if ($date == null || $date == "") {
+            return "";
+        } elseif (preg_match("/^[0-9]{8}$/", $date) === 1) {
+            // 20120725
+            return $this->dateConverter->convertToDisplayDate('Ynd', $date);
+        } elseif (preg_match("/^[0-9]+\/[A-Za-z]{3}\/[0-9]{4}$/", $date) === 1) {
+            // 13/jan/2012
+            return $this->dateConverter->convertToDisplayDate('d/M/Y', $date);
+        } elseif (preg_match("/^[0-9]+\/[0-9]+\/[0-9]{4}$/", $date) === 1) {
+            // 13/7/2012
+            return $this->dateConverter->convertToDisplayDate('d/m/Y', $date);
+        } elseif (preg_match("/^[0-9]+\/[0-9]+\/[0-9]{2}$/", $date) === 1) {
+            // 13/7/12 - ntk uses this format
+            $date = substr_replace($date, '20', - 2, 0);
+            return $this->dateConverter->convertToDisplayDate('d/m/Y', $date);
+        } else {
+            throw new \Exception("Invalid date: $date");
+        }
     }
 }

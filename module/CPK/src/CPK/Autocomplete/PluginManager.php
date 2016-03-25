@@ -59,7 +59,7 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
      * type
      * @param string                  $queryParam Request parameter containing query
      * string
-     * @param string                  $filterParam Request parameter containing filters
+     * @param array                   $facetFilters
      *
      * @return array
      */
@@ -67,15 +67,13 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
         $request, 
         $typeParam = 'type', 
         $queryParam = 'q',
-        $filterParam = 'filter'
+        $facetFilters = []
     ) 
     {
         // Process incoming parameters:
         $type = $request->get($typeParam, '');
         $query = $request->get($queryParam, '');
-        $filter = $request->get($filterParam, '');
         $searcher = $request->get('searcher', 'Solr');
-
         // If we're using a combined search box, we need to override the searcher
         // and type settings.
         if (substr($type, 0, 7) == 'VuFind:') {
@@ -95,7 +93,7 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
         // Handler
         // solr field with "text_autocomplete" type
         // solr field with "string" type that is exactly equal to previous one
-        $titleModule   = "SolrEdgeFaceted:title_autocomplete:title_str";
+        $titleModule   = "SolrEdgeFaceted:title_autocomplete:title_auto_str";
         $authorModule  = "SolrEdgeFaceted:author_autocomplete:author_str_mv";
         $subjectModule = "SolrEdgeFaceted:subject_autocomplete:subject_str_mv";
 
@@ -132,13 +130,13 @@ class PluginManager extends \VuFind\ServiceManager\AbstractPluginManager
         }
         
         $titleSuggestions = (isset($titleHandler) && is_object($titleHandler))
-            ? array_values($titleHandler->getSuggestions($query)) : [];
+            ? array_values($titleHandler->getSuggestionsWithFilters($query, $facetFilters)) : [];
         
         $authorSuggestions = (isset($authorHandler) && is_object($authorHandler))
-        ? array_values($authorHandler->getSuggestions($query)) : [];
+            ? array_values($authorHandler->getSuggestionsWithFilters($query, $facetFilters)) : [];
         
         $subjectSuggestions = (isset($subjectHandler) && is_object($subjectHandler))
-        ? array_values($subjectHandler->getSuggestions($query)) : [];
+            ? array_values($subjectHandler->getSuggestionsWithFilters($query, $facetFilters)) : [];
         
         $suggestions['byTitle'] = $titleSuggestions;
         $suggestions['byAuthor'] = $authorSuggestions;

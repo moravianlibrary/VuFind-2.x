@@ -34,7 +34,7 @@ use Zend\Config\Config;
  *
  * @category VuFind2
  * @package View_Helpers
- * @author   Jiří Kozlovský <mail@jkozlovsky.cz>
+ * @author Jiří Kozlovský <mail@jkozlovsky.cz>
  * @license http://opensource.org/licenses/gpl-2.0.php GNU General Public License
  * @link http://vufind.org/wiki/vufind2:developer_manual Wiki
  */
@@ -42,16 +42,16 @@ class Logos extends \Zend\View\Helper\AbstractHelper
 {
 
     /**
-     * VuFind configuration
+     * DB institutions table
      *
-     * @var \Zend\Config\Config
+     * @var \CPK\Db\Table\Institutions
      */
-    protected $config;
+    protected $institutionsTable;
 
     /**
      * Associative array holding the logos
      *
-     * @var array
+     * @var object
      */
     protected $idpLogos;
 
@@ -61,28 +61,32 @@ class Logos extends \Zend\View\Helper\AbstractHelper
      * @param
      *            \Zend\Config\Config VuFind configuration
      */
-    public function __construct(Config $config)
+    public function __construct(\Zend\Config\Config $config)
     {
-        $this->config = $config;
-
-        if ($this->config['IdPLogos'] !== null) {
-            $this->idpLogos = $this->config['IdPLogos']->toArray();
-        } else {
-            $this->idpLogos = [];
+        $idps = $config->toArray();
+        
+        foreach ($idps as $source => $idp) {
+            
+            if (isset($idp['logo']))
+                $this->idpLogos[$source] = $idp['logo'];
         }
     }
 
     /**
      * Returns URL of the institution's logo specified by the source.
      *
-     * @param string $source
+     * @param string $source            
      */
     public function getLogo($source)
     {
+        if (($pos = strpos($source, '.')) !== false) {
+            $source = substr($source, 0, $pos);
+        }
+        
         if (isset($this->idpLogos[$source])) {
             return $this->idpLogos[$source];
         }
-
+        
         return '';
     }
 }

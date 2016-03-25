@@ -14,7 +14,7 @@
 
 ?>
 <ul class="list-group record-toolbar">
-  <li class="list-group-item"><a id="mail-record" class="modal-link <?=$controllerClass?>" href="<?=$this->url('record-email', array('id'=>$id)) ?>" title="<?=$this->transEsc('Email this')?>" rel="nofollow"><i class="fa fa-fw fa-envelope"></i> <?=$this->transEsc('Email this')?></a></li>
+  <li class="list-group-item"><a id="mail-record" class="modal-link <?=$controllerClass?>" title="<?=$this->transEsc('Email this')?>" rel="nofollow"><i class="fa fa-fw fa-envelope"></i> <?=$this->transEsc('Email this')?></a></li>
 
   <? $exportFormats = $this->export()->getFormatsForRecord($this->driver); ?>
   <? if(count($exportFormats) > 0): ?>
@@ -27,6 +27,12 @@
       </ul>
     </li>
   <? endif; ?>
+
+  <li class="list-group-item" id='permalinkItem'>
+    <a class="modal-link" id='permalinkAnchor' title="<?=$this->translate('Permalink')?>" >
+      <i class="fa fa-fw fa-link"></i> <?=$this->translate('Permalink')?>
+    </a>
+  </li>
 
   <? if ($this->userlist()->getMode() !== 'disabled'): ?>
     <li class="list-group-item">
@@ -69,6 +75,12 @@
 jQuery( document ).ready(function( $ ) {
 	$( '#citace-pro' ).on('click', '.citations-link', function(){
 		$( '#citationsModal' ).modal( 'show' );
+	});
+	$( '#permalinkItem' ).on('click', '#permalinkAnchor', function(){
+		$( '#permalinkModal' ).modal( 'show' );
+	});
+	$( '.record-toolbar' ).on('click', '#mail-record', function(){
+		$( '#mailRecordModal' ).modal( 'show' );
 	});
 });
 </script>

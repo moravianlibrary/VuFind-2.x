@@ -300,6 +300,33 @@ function setupBacklinks() {
     });
 }
 
+function getURLParam(key,target) {
+    var values = [];
+    if (!target) {
+        target = location.href;
+    }
+
+	key = key.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+    
+    var pattern = key + '=([^&#]+)';
+    var o_reg = new RegExp(pattern,'ig');
+	while (true) {
+		var matches = o_reg.exec(target);
+		if (matches && matches[1]) {
+			values.push(matches[1]);
+		}
+		else {
+			break;
+		}
+	}
+    if (!values.length) {
+         return 'null';   
+    }
+    else {
+        return values.length == 1 ? values[0] : values;
+    }
+}
+
 function setupAutocomplete() {
   // Search autocomplete
   $('.autocomplete').each(function(i, op) {
@@ -308,11 +335,17 @@ function setupAutocomplete() {
       loadingString: VuFind.translate('loading')+'...',
       handler: function(query, cb) {
         var searcher = extractClassParams(op);
+        var currentUrl = decodeURIComponent($(location).attr('search'));
+        //console.log('CurrentUrl: '+currentUrl);
+        var filters = $( '.searchFormKeepFilters' ).is(':checked') 
+        	? getURLParam('filter[]', currentUrl) 
+        	: 'null';
         $.fn.autocomplete.ajax({
           url: VuFind.getPath() + '/AJAX/JSON',
           data: {
             q:query,
             method:'getACSuggestions',
+            filters: filters,
             searcher:searcher['searcher'],
             type:searcher['type'] ? searcher['type'] : $(op).closest('.searchForm').find('.searchForm_type').val()
           },

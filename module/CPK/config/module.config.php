@@ -60,7 +60,8 @@ $config = array(
                     'user' => 'CPK\Db\Table\Factory::getUser',
                     'citationstyle' => 'CPK\Db\Table\Factory::getCitationStyle',
                     'usersettings' => 'CPK\Db\Table\Factory::getUserSettings',
-                    'portalpages' => 'CPK\Db\Table\Factory::getPortalPages'
+                    'portalpages' => 'CPK\Db\Table\Factory::getPortalPages',
+                    'notifications' => 'CPK\Db\Table\Factory::getNotifications',
                 ], /* factories */
                 'invokables' => [
                     'session' => 'VuFind\Db\Table\Session'
@@ -76,6 +77,11 @@ $config = array(
                     'aleph' => 'CPK\ILS\Driver\Factory::getAleph'
                 ), /* factories */
             ], /* ils_driver */
+                'autocomplete' => [
+                    'factories' => [
+                        'solredgefaceted' => 'CPK\Autocomplete\Factory::getSolrEdgeFaceted'
+                    ],
+            ],
         ), /* plugin_managers */
 
         // This section controls which tabs are used for which record driver classes.
@@ -144,11 +150,13 @@ $config = array(
         'factories' => array(
             'VuFind\AuthManager' => 'CPK\Auth\Factory::getAuthManager',
             'VuFind\ILSAuthenticator' => 'CPK\Auth\Factory::getILSAuthenticator',
-            'CPK\AutocompletePluginManager' => 'CPK\Service\Factory::getAutocompletePluginManager'
+            'CPK\AutocompletePluginManager' => 'CPK\Service\Factory::getAutocompletePluginManager',
+            'CPK\NotificationsHandler' => 'CPK\Notifications\Factory::getNotificationsHandler',
         ), // Exceptions throwing system
 
         'invokables' => array(
-            'wantitfactory' => 'CPK\WantIt\Factory'
+            'wantitfactory' => 'CPK\WantIt\Factory',
+            'searchController' => 'CPK\Controller\SearchController',
         )
     )
 );

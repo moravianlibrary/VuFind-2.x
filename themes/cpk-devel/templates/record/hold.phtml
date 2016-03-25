@@ -18,7 +18,7 @@
 <div class="hold-form">
   <form action='' class="form-horizontal" method="post" name="placeHold">
       <div class="form-group">
-        <label class="col-sm-3 control-label"><?=$this->translate('Subject')?>: </label>
+        <label class="col-sm-3 control-label"><?=$this->translate('Title')?>: </label>
         <div class="col-sm-9">
            <input disabled type='text' class='form-control' value='<?=$this->driver->getTitle()?>'>
         </div>
@@ -135,12 +135,33 @@
         </div>
         <div class="form-group">
           <label class="col-sm-3 control-label"><?=$this->transEsc("pick_up_address")?>:</label>
-          <div id="showaddress" class="col-sm-3"></div>
+          <div class="col-sm-9">
+            <input disabled type='text' class='form-control showaddress' value=''>
+          </div>
         </div>
       <? else: ?>
         <input type="hidden" name="gatheredDetails[pickUpLocation]" value="<?=$this->escapeHtmlAttr($this->defaultPickup)?>" />
       <? endif; ?>
     <? endif; ?>
+    
+    <? if ($this->holdDueDate): ?>
+        <div class="form-group">
+          <label class="col-sm-3 control-label"></label>
+          <div class="col-sm-9">
+            <?=$this->translate('Document is lend').'.'?>
+          </div>
+        </div>
+    <? endif; ?>
+    
+    <? if (! empty($holdQueue)): ?>
+        <div class="form-group">
+          <label class="col-sm-3 control-label"><?=$this->transEsc("hold_queue")?>:</label>
+          <div class="col-sm-9">
+            <input disabled type='text' class='form-control' value='<?=$holdQueue . "."?>'>
+          </div>
+        </div>
+    <? endif; ?>
+    
     <div class="form-group">
       <div class="col-sm-9 col-sm-offset-3">
         <input class="btn btn-primary" type="submit" name="placeHold" value="<?=$this->transEsc('request_submit_text')?>"/>
@@ -168,7 +189,7 @@ JS;
     $js = <<<JS
         $( '#pickUpLocation' ).change(function () {
           var id = $(this).val();
-          $('div#showaddress').text( $( '#' + id + ' div#address' ).text() );
+          $('input.showaddress').val( $( '#' + id + ' div#address' ).text() );
         }).change();
 JS;
 
