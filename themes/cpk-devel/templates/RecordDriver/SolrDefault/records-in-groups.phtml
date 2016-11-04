@@ -1,14 +1,14 @@
 <div style='padding: 0px !important;'>
 
-  	<?php
-	  	$dedupedRecords = array_map("unserialize", array_unique(array_map("serialize", $this->tabs['DedupedRecords']->getRecordsInGroup())));
-
-	  	$recordSource = explode(".", $this->driver->getUniqueId())[0];
-
-	  	$logoUrl = $this->logos()->getLogo($recordSource);
-	  	$currentInstitution = $this->translate('source_'.$recordSource);
-  	?>
-
+    <?php
+        $dedupedRecords = array();
+        if (isset($this->tabs['DedupedRecords'])) {
+            $dedupedRecords = array_map("unserialize", array_unique(array_map("serialize", $this->tabs['DedupedRecords']->getRecordsInGroup())));
+            $recordSource = explode(".", $this->driver->getUniqueId())[0];
+            $logoUrl = $this->logos()->getLogo($recordSource);
+            $currentInstitution = $this->translate('source_' . $recordSource);
+        }
+    ?>
 
 	<? if (count($dedupedRecords) !== 1) :?>
 	<div class="dropdown">

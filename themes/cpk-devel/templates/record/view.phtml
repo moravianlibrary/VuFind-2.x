@@ -260,7 +260,7 @@
 
             	//
             	var recordID = '<?= $this->driver->getUniqueID() ?>';
-            	var parentRecordID = '<?= $this->driver->getParentRecordID() ?>';
+                var parentRecordID = '<?= $this->driver->tryMethod("getParentRecordID"); ?>';
 
             	var buyLinks = getBuyLinks( recordID, parentRecordID, disableBuyTab );
 
