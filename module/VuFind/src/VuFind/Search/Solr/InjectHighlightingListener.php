@@ -30,6 +30,7 @@ namespace VuFind\Search\Solr;
 
 use VuFindSearch\Backend\BackendInterface;
 
+use Zend\Config\Config;
 use Zend\EventManager\SharedEventManagerInterface;
 use Zend\EventManager\EventInterface;
 
@@ -66,17 +67,27 @@ class InjectHighlightingListener
     protected $fieldList;
 
     /**
+     * Additional highlighting parameters
+     *
+     * @var string
+     */
+    protected $highlightParameters;
+
+    /**
      * Constructor.
      *
      * @param BackendInterface $backend   Backend
-     * @param string           $fieldList Field(s) to highlight (hl.fl param)
+     * @param Config           $search    Search configuration
      *
      * @return void
      */
-    public function __construct(BackendInterface $backend, $fieldList = '*')
+    public function __construct(BackendInterface $backend, Config $search)
     {
         $this->backend = $backend;
-        $this->fieldList = $fieldList;
+        $this->fieldList = isset($search->General->highlighting_fields)
+            ? $search->General->highlighting_fields : '*';
+        $this->highlightParameters = isset($search->Solr_highlighting_parameters) ?
+            $search->Solr_highlighting_parameters : array();
     }
 
     /**
@@ -116,6 +127,9 @@ class InjectHighlightingListener
                     $params->set('hl.fl', $this->fieldList);
                     $params->set('hl.simple.pre', '{{{{START_HILITE}}}}');
                     $params->set('hl.simple.post', '{{{{END_HILITE}}}}');
+                    foreach ($this->highlightParameters as $key => $value) {
+                        $params->set('hl.' . $key, $value);
+                    }
 
                     // Turn on hl.q generation in query builder:
                     $this->backend->getQueryBuilder()

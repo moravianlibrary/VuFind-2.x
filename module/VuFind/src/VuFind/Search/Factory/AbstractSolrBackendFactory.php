@@ -516,7 +516,7 @@ abstract class AbstractSolrBackendFactory implements FactoryInterface
     ) {
         $fl = isset($search->General->highlighting_fields)
             ? $search->General->highlighting_fields : '*';
-        return new InjectHighlightingListener($backend, $fl);
+        return new InjectHighlightingListener($backend, $search);
     }
 
     /**
