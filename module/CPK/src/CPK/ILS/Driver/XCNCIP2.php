@@ -829,6 +829,7 @@ class XCNCIP2 extends \VuFind\ILS\Driver\AbstractBase implements
         }
         else {
             if (in_array($this->agency, $this->libsLikeTabor)) {
+                $bibId = '0002' . sprintf('%011d', $bibId);
                 $request = $this->requests->LUISBibItem($bibId, $nextItemToken, $this, $patron);
                 $response = $this->sendRequest($request);
                 return $this->handleStutuses($response);
