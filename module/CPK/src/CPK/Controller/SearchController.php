@@ -360,17 +360,6 @@ class SearchController extends SearchControllerBase
 
         $view->widgets = $widgets;
 
-        if (! empty($this->params()->fromPost('mylang'))) {
-            $languageCode = $this->params()->fromPost('mylang');
-        } else if (! empty($_COOKIE['language'])) {
-            $languageCode = $_COOKIE['language'];
-        } else {
-            $config = $this->getConfig();
-            $languageCode = $config->Site->language;
-        }
-
-        $view->language = explode("-", $languageCode)[0];
-
         $searchesConfig = $this->getConfig('searches');
         // If user have preferred limit and sort settings
         if ($user = $this->getAuthManager()->isLoggedIn()) {

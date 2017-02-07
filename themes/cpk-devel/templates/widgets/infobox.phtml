@@ -1,3 +1,4 @@
+<? $language = explode("-", $this->layout()->userLang)[0]; ?>
 <div class="col-md-4 infobox widget">
     <div class='header'>
     	<h2><?=$this->transEsc('You know that')?></h2>
@@ -8,10 +9,10 @@
         <div class='row'>
           <div class="col-xs-12 content">
             <h4 class='list-group-item-heading'>
-              <?= ($this->language == 'cs') ? $item->getTitleCs() : $item->getTitleEn() ?>
+              <?= ($language == 'cs') ? $item->getTitleCs() : $item->getTitleEn() ?>
             </h4>
             <p class="list-group-item-text">
-              <?= ($this->language == 'cs') ? $item->getTextCs() : $item->getTextEn() ?>
+              <?= ($language == 'cs') ? $item->getTextCs() : $item->getTextEn() ?>
             </p>
           </div>
         </div>
