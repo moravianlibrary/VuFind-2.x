@@ -16,7 +16,12 @@ function buildFacetNodes(data, currentPath, allowExclude, excludeTitle, counts)
       facetFilter = facetFilterBase;
     }
     if (!this.isApplied && counts) {
-      html = "<span class='badge' style='float: right'>" + this.count.toString().replace(/\B(?=(\d{3})+\b)/g, VuFind.translate("number_thousands_separator"));
+      html = "<span class='badge";
+      if (facetName == "cpk_detected_format_facet_str_mv") {
+          html += " show-numbers";
+      }
+
+      html += "' style='float: right'>" + this.count.toString().replace(/\B(?=(\d{3})+\b)/g, VuFind.translate("number_thousands_separator"));
       if (allowExclude) {
         var excludeURL = currentPath + this.exclude;
         excludeURL.replace("'", "\\'");
@@ -50,7 +55,7 @@ function buildFacetNodes(data, currentPath, allowExclude, excludeTitle, counts)
         }
     }
 
-    html += "' title='" + htmlEncode(this.displayText) + "'>";
+    html += "' title='" + htmlEncode(this.tooltiptext) + "'>";
     if (this.operator == 'OR') {
       if (this.isApplied) {
         html += '<i class="fa fa-check-square-o"></i>';
@@ -145,6 +150,7 @@ function initFacetTree(treeNode, inSidebar)
         if (inSidebar) {
           treeNode.on('loaded.jstree open_node.jstree', function (e, data) {
             treeNode.find('ul.jstree-container-ul > li.jstree-node').addClass('list-group-item');
+            treeNode.find('ul.jstree-container-ul > li.jstree-node .jstree-icon').attr( 'title', VuFind.translate( 'Expand or collapse' ) );
           });
         }
         treeNode.jstree({
@@ -192,6 +198,7 @@ function initFacetOrTree(treeNode, inSidebar)
                 if (inSidebar) {
                     treeNode.on('loaded.jstree open_node.jstree', function (e, data) {
                         treeNode.find('ul.jstree-container-ul > li.jstree-node').addClass('list-group-item');
+                        treeNode.find('ul.jstree-container-ul > li.jstree-node .jstree-icon').attr( 'title', VuFind.translate( 'Expand or collapse' ) );
                     });
                 }
                 treeNode.jstree({
@@ -246,6 +253,7 @@ function initInstitutionsTree(treeNode, inSidebar)
         if (inSidebar) {
           treeNode.on('loaded.jstree open_node.jstree', function (e, data) {
             treeNode.find('ul.jstree-container-ul > li.jstree-node').addClass('list-group-item');
+            treeNode.find('ul.jstree-container-ul > li.jstree-node .jstree-icon').attr( 'title', VuFind.translate( 'Expand or collapse' ) );
           });
         }
         treeNode.jstree({
