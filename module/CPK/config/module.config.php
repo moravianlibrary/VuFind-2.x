@@ -204,7 +204,8 @@ $staticRoutes = array(
     'Admin/Configurations',
     'Admin/ConfigurationsApproval',
     'Admin/PortalPages',
-    'Admin/PermissionsManager'
+    'Admin/PermissionsManager',
+    'MyResearch/ChangeTitle'
 );
 
 foreach ($staticRoutes as $route) {
