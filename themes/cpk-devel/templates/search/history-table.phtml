@@ -12,7 +12,7 @@
 
 <script type="text/javascript">
 $(document).ready(function() {
-    $(document).off().on('click', 'a.edit, a.savetitle', function() {
+    $(document).on('click', 'a.edit, a.savetitle', function() {
         var dad = $(this).closest('tr');
         var label = $(dad).find('div.control-group > label');
         var edit = $(dad).find('.edit-input');
