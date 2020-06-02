@@ -28,6 +28,8 @@
  */
 namespace VuFindTest\Unit;
 
+use Laminas\Log\Writer\Stream;
+use VuFind\Log\LoggerFactory;
 use VuFind\Search\Factory\UrlQueryHelperFactory;
 
 /**
@@ -188,10 +190,6 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
                 new \VuFind\Config\SearchSpecsReader()
             );
             $this->serviceManager->setService(
-                \VuFind\Log\Logger::class,
-                $this->createMock(\VuFind\Log\Logger::class)
-            );
-            $this->serviceManager->setService(
                 \VuFindHttp\HttpService::class, new \VuFindHttp\HttpService()
             );
             $this->setupSearchService();
@@ -219,6 +217,15 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
             );
             $this->serviceManager->setService(
                 UrlQueryHelperFactory::class, new UrlQueryHelperFactory()
+            );
+            $this->serviceManager->setService(
+                \ProxyManager\Configuration::class, new \ProxyManager\Configuration()
+            );
+            $loggerFactory = new \VuFind\Log\LoggerFactory();
+            $logger = $loggerFactory($this->serviceManager, 'VuFind\Log\Logger');
+            $this->serviceManager->setService(
+                \VuFind\Log\Logger::class,
+                $logger
             );
         }
         return $this->serviceManager;
