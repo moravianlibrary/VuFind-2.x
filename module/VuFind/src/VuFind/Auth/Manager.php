@@ -721,6 +721,24 @@ class Manager implements \LmcRbacMvc\Identity\IdentityProviderInterface
     }
 
     /**
+     * Connect user authenticated by shibboleth to library card.
+     *
+     * @param \Laminas\Http\PhpEnvironment\Request $request Request object containing
+     *        account credentials.
+     * @param \VuFind\Db\Row\User $connectingUser Connect newly created library card
+     *        to this user.
+     *
+     * @return bool
+     */
+    public function connectUser($request, $user) {
+        $auth = $this->getAuth();
+        if (is_callable([$auth, 'connectUser'])) {
+            return $auth->connectUser($request, $user);
+        }
+        return false;
+    }
+
+    /**
      * Update common user attributes on login
      *
      * @param \VuFind\Db\Row\User $user User object

@@ -81,7 +81,8 @@ class LibraryCardsController extends AbstractBase
         return $this->createViewModel(
             [
                 'libraryCards' => $user->getLibraryCards(),
-                'multipleTargets' => $catalog->checkCapability('getLoginDrivers')
+                'multipleTargets' => $catalog->checkCapability('getLoginDrivers'),
+                'shibboleth' => ($this->getAuthManager()->getAuthMethod() == 'shibboleth'),
             ]
         );
     }
@@ -238,6 +239,26 @@ class LibraryCardsController extends AbstractBase
             return $this->redirect()->toUrl($this->adjustCardRedirectUrl($url));
         }
         return $this->redirect()->toRoute('myresearch-home');
+    }
+
+    public function connectNewShibbolethCardAction()
+    {
+        $url = $this->getServerUrl('librarycards-connectshibbolethcard');
+        // FIXME: force login in session initiator
+        $redirectUrl = $this->getAuthManager()->getSessionInitiator($url);
+        return $this->redirect()->toUrl($redirectUrl);
+    }
+
+    public function connectShibbolethCardAction()
+    {
+        $user = $this->getUser();
+        try {
+            $this->getAuthManager()->connectUser($this->getRequest(), $user);
+        } catch (\Exception $ex) {
+            $this->flashMessenger()->setNamespace('error')
+                ->addMessage($ex->getMessage());
+        }
+        return $this->redirect()->toUrl('/LibraryCards/Home');
     }
 
     /**
