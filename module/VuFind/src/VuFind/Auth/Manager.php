@@ -730,7 +730,8 @@ class Manager implements \LmcRbacMvc\Identity\IdentityProviderInterface
      *
      * @return bool
      */
-    public function connectUser($request, $user) {
+    public function connectUser($request, $user)
+    {
         $auth = $this->getAuth();
         if (is_callable([$auth, 'connectUser'])) {
             return $auth->connectUser($request, $user);
