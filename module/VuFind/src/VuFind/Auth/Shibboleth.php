@@ -230,7 +230,7 @@ class Shibboleth extends AbstractBase
         $username = $shib['prefix'] . '.' . $this->getAttribute($request,
             $shib['cat_username']);
         $password = $shib['cat_password'] ?? null;
-        $connectingUser->saveLibraryCard(null, $shib['prefix'], $username, $password);
+        $connectingUser->saveLibraryCard(null, $username, $username, $password);
     }
 
     /**
