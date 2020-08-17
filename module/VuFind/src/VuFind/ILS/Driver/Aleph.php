@@ -1417,6 +1417,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         $recordList['dateFrom'] = $dateFrom;
         $recordList['dateTo'] = $dateTo;
         $recordList['id'] = $user['id'];
+        $recordList['cat_username'] = $user['id'];
         $xml = $this->doRestDLFRequest(
             ['patron', $user['id'], 'patronStatus', 'registration']
         );
