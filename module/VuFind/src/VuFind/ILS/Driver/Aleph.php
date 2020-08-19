@@ -915,7 +915,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 'location' => $location,
                 'title' => $title,
                 'author' => $author,
-                'isbn' => [$isbn],
+                'isbn' => $isbn,
                 'reqnum' => $reqnum,
                 'barcode' => $barcode,
                 'checkoutDate' => $this->parseDate($issued),
@@ -1021,7 +1021,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 'location' => $location,
                 'title' => $title,
                 'author' => $author,
-                'isbn' => [$isbn],
+                'isbn' => $isbn,
                 'reqnum' => $reqnum,
                 'barcode' => $barcode,
                 'issuedate' => $this->parseDate($issued),
@@ -1144,7 +1144,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                     'location' => $location,
                     'title' => $title,
                     'author' => $author,
-                    'isbn' => [$isbn],
+                    'isbn' => $isbn,
                     'reqnum' => $reqnum,
                     'barcode' => $barcode,
                     'id' => $this->barcodeToID($barcode),
@@ -1417,6 +1417,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         $recordList['dateFrom'] = $dateFrom;
         $recordList['dateTo'] = $dateTo;
         $recordList['id'] = $user['id'];
+        $recordList['cat_username'] = $user['id'];
         $xml = $this->doRestDLFRequest(
             ['patron', $user['id'], 'patronStatus', 'registration']
         );
