@@ -1261,9 +1261,19 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $item_id = substr($href[0], strrpos($href[0], '/') + 1);
             if ((string)$z37->{'z37-request-type'} == "Hold Request" || true) {
                 $type = "hold";
-                //$docno = (string) $z37->{'z37-doc-number'};
-                //$itemseq = (string) $z37->{'z37-item-sequence'};
-                $seq = (string)$z37->{'z37-sequence'};
+                $seq = null;
+                $itemStatus = preg_replace(
+                    "/\s[\s]+/", " ", (string) $item->{'status'}
+                );
+                $matches = [];
+                if (preg_match(
+                    "/Waiting in position ([0-9]+) in queue; current due date"
+                    . " ([0-9]+\/[a-z|A-Z]+\/[0-9])+/",
+                    $itemStatus, $matches
+                )
+                ) {
+                    $seq = $matches[1];
+                }
                 $location = (string)$z37->{'z37-pickup-location'};
                 $reqnum = (string)$z37->{'z37-doc-number'}
                     . (string)$z37->{'z37-item-sequence'}
@@ -1297,7 +1307,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                     'delete' => $delete,
                     'create' => $this->parseDate($create),
                     'status' => $status,
-                    'position' => ltrim($seq, '0')
+                    'position' => $seq,
                 ];
             }
         }
