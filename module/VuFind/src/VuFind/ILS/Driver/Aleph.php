@@ -39,6 +39,9 @@ namespace VuFind\ILS\Driver;
 
 use VuFind\Date\DateException;
 use VuFind\Exception\ILS as ILSException;
+use VuFind\ILS\Driver\Aleph\IdResolver;
+use VuFind\ILS\Driver\Aleph\FixedIdResolver;
+use VuFind\ILS\Driver\Aleph\SolrIdResolver;
 
 /**
  * Aleph Translator Class
@@ -342,16 +345,29 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     protected $dlfbaseurl = null;
 
     /**
+     *
+     * @var \VuFindSearch\Service
+     */
+    protected $searchService = null;
+
+    /**
+     *
+     * @var IdResolver
+     */
+    protected $idResolver = null;
+
+    /**
      * Constructor
      *
      * @param \VuFind\Date\Converter $dateConverter Date converter
      * @param \VuFind\Cache\Manager  $cacheManager  Cache manager (optional)
      */
     public function __construct(\VuFind\Date\Converter $dateConverter,
-        \VuFind\Cache\Manager $cacheManager = null
+        \VuFind\Cache\Manager $cacheManager = null, \VuFindSearch\Service $searchService
     ) {
         $this->dateConverter = $dateConverter;
         $this->cacheManager = $cacheManager;
+        $this->searchService = $searchService;
     }
 
     /**
@@ -434,6 +450,12 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         }
         if (isset($this->config['Catalog']['default_patron_id'])) {
             $this->defaultPatronId = $this->config['Catalog']['default_patron_id'];
+        }
+        $idResolver = $this->config['IdResolver']['type'] ?? 'fixed';
+        if ($idResolver == 'solr') {
+            $this->idResolver = new SolrIdResolver($this->searchService, $this->config);
+        } else {
+            $this->idResolver = new FixedIdResolver();
         }
     }
 
@@ -1013,10 +1035,12 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $author = (string)$z13->{'z13-author'};
             $isbn = (string)$z13->{'z13-isbn-issn'};
             $barcode = (string)$z30->{'z30-barcode'};
+            $adm_id = (string) $z30->{'z30-doc-number'};
 
             $transList[] = [
                 //'type' => $type,
                 'id' => $this->barcodeToID($barcode),
+                'adm_id'   => $adm_id,
                 'item_id' => $group,
                 'location' => $location,
                 'title' => $title,
@@ -1032,7 +1056,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 //'create' => $this->parseDate($create)
             ];
         }
-
+        $this->idResolver->resolveIds($transList);
         return $transList;
     }
 
@@ -1157,6 +1181,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 ];
             }
         }
+        $this->idResolver->resolveIds($holdList);
         return $holdList;
     }
 
