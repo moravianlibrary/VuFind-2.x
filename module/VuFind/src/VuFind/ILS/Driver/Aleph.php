@@ -309,6 +309,8 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     use \VuFind\Log\LoggerAwareTrait;
     use \VuFindHttp\HttpServiceAwareTrait;
 
+    const RECORD_ID_BASE_SEPARATOR = '-';
+
     /**
      * Duedate configuration
      *
@@ -610,18 +612,11 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
      */
     protected function parseId($id)
     {
-        if (count($this->bib) == 1) {
-            $retval = [$this->bib[0], $id];
+        if (strpos($id, self::RECORD_ID_BASE_SEPARATOR) !== FALSE) {
+            return explode(self::RECORD_ID_BASE_SEPARATOR, $id, 2);
         } else {
-            $retval = explode('-', $id);
+            return array($this->bib[0], $id);
         }
-        if (count($retval) != 2) {
-            throw new \Exception("The resulting array has incorrect size");
-        }
-        if (!in_array($retval[0], $this->bib)) {
-            throw new \Exception("The resulting array contains unknown library ID");
-        }
-        return $retval;
     }
 
     /**
