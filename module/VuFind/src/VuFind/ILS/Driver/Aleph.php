@@ -309,6 +309,8 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     use \VuFind\Log\LoggerAwareTrait;
     use \VuFindHttp\HttpServiceAwareTrait;
 
+    const RECORD_ID_BASE_SEPARATOR = '-';
+
     /**
      * Duedate configuration
      *
@@ -610,18 +612,11 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
      */
     protected function parseId($id)
     {
-        if (count($this->bib) == 1) {
-            $retval = [$this->bib[0], $id];
+        if (strpos($id, self::RECORD_ID_BASE_SEPARATOR) !== FALSE) {
+            return explode(self::RECORD_ID_BASE_SEPARATOR, $id, 2);
         } else {
-            $retval = explode('-', $id);
+            return array($this->bib[0], $id);
         }
-        if (count($retval) != 2) {
-            throw new \Exception("The resulting array has incorrect size");
-        }
-        if (!in_array($retval[0], $this->bib)) {
-            throw new \Exception("The resulting array contains unknown library ID");
-        }
-        return $retval;
     }
 
     /**
@@ -1141,9 +1136,13 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $item_id = substr($href[0], strrpos($href[0], '/') + 1);
             if ((string)$z37->{'z37-request-type'} == "Hold Request" || true) {
                 $type = "hold";
-                //$docno = (string) $z37->{'z37-doc-number'};
-                //$itemseq = (string) $z37->{'z37-item-sequence'};
-                $seq = (string)$z37->{'z37-sequence'};
+                $seq = null;
+                $itemStatus = preg_replace("/\s[\s]+/", " ", (string) $item->{'status'});
+                $matches = [];
+                if (preg_match("/Waiting in position ([0-9]+) in queue; current due date ([0-9]+\/[a-z|A-Z]+\/[0-9])+/",
+                    $itemStatus, $matches)) {
+                    $seq = $matches[1];
+                }
                 $location = (string)$z37->{'z37-pickup-location'};
                 $reqnum = (string)$z37->{'z37-doc-number'}
                     . (string)$z37->{'z37-item-sequence'}
@@ -1177,7 +1176,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                     'delete' => $delete,
                     'create' => $this->parseDate($create),
                     'status' => $status,
-                    'position' => ltrim($seq, '0')
+                    'position' => $seq,
                 ];
             }
         }

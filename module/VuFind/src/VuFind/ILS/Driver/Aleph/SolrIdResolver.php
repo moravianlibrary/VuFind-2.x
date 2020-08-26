@@ -43,6 +43,8 @@ class SolrIdResolver implements IdResolver
 
     protected $stripPrefix = true;
 
+    protected $prefix = null;
+
     /**
      * Search service (used for lookups by barcode number)
      *
@@ -61,6 +63,9 @@ class SolrIdResolver implements IdResolver
         }
         if (isset($config['IdResolver']['stripPrefix'])) {
             $this->stripPrefix = $config['IdResolver']['stripPrefix'];
+        }
+        if (isset($config['IdResolver']['prefix'])) {
+            $this->prefix = $config['IdResolver']['prefix'];
         }
     }
 
@@ -94,7 +99,7 @@ class SolrIdResolver implements IdResolver
             $query = new \VuFindSearch\Query\Query($this->solrQueryField. ':' . $id);
             if (isset($this->prefix)) {
                 $idPrefixQuery = new \VuFindSearch\Query\Query('id:' . $this->prefix . '.*');
-                $query = new \VuFindSearch\Query\QueryGroup('AND', [$idPrefixQuery, $query]);
+                $query = new \VuFindSearch\Query\QueryGroup('AND', [ $idPrefixQuery, $query ]);
             }
             $params = new \VuFindSearch\ParamBag();
             $doc = $this->searchService->getIds('Solr', $query, 0, sizeof($ids), $params)->first();
