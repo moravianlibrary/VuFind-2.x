@@ -359,6 +359,12 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     protected $idResolver = null;
 
     /**
+     *
+     * @var array
+     */
+    protected $addressMappings = null;
+
+    /**
      * Constructor
      *
      * @param \VuFind\Date\Converter $dateConverter Date converter
@@ -459,6 +465,28 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         } else {
             $this->idResolver = new FixedIdResolver();
         }
+
+        $this->addressMappings = $this->getDefaultAddressMappings();
+
+        if (isset($this->config['AddressMappings'])) {
+            foreach ($this->config['AddressMappings'] as $key => $val) {
+                if (!empty($val)) {
+                    $this->addressMappings[$key] = $val;
+                }
+            }
+        }
+    }
+
+    protected function getDefaultAddressMappings() {
+        return [
+            'barcode' => 'z304-address-5',
+            'fullname' => 'z304-address-1',
+            'street' => 'z304-address-2',
+            'city' => 'z304-address-3',
+            'zip' => 'z304-zip',
+            'email' => 'z304-email-address',
+            'phone' => 'z304-telephone-1',
+        ];
     }
 
     /**
@@ -1413,43 +1441,31 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         $xml = $this->doRestDLFRequest(
             ['patron', $user['id'], 'patronInformation', 'address']
         );
-        $address = $xml->xpath('//address-information');
-        $address = $address[0];
-        $address1 = (string)$address->{'z304-address-1'};
-        $address2 = (string)$address->{'z304-address-2'};
-        $address3 = (string)$address->{'z304-address-3'};
-        //$address4 = (string)$address->{'z304-address-4'};
-        //$address5 = (string)$address->{'z304-address-5'};
-        $zip = (string)$address->{'z304-zip'};
-        $phone = (string)$address->{'z304-telephone-1'};
-        $email = (string)$address->{'z404-email-address'};
-        $dateFrom = (string)$address->{'z304-date-from'};
-        $dateTo = (string)$address->{'z304-date-to'};
-        if (strpos($address2, ",") === false) {
-            $recordList['lastname'] = $address2;
-            $recordList['firstname'] = "";
-        } else {
-            list($recordList['lastname'], $recordList['firstname'])
-                = explode(",", $address2);
+        $profile = [];
+        $address = $xml->xpath('//address-information')[0];
+        foreach ($this->addressMappings as $key => $value) {
+            if (!empty($value)) {
+                $profile[$key] = (string) $address->{$value};
+            }
         }
-        $recordList['address1'] = $address2;
-        $recordList['address2'] = $address3;
-        $recordList['barcode'] = $address1;
-        $recordList['zip'] = $zip;
-        $recordList['phone'] = $phone;
-        $recordList['email'] = $email;
-        $recordList['dateFrom'] = $dateFrom;
-        $recordList['dateTo'] = $dateTo;
-        $recordList['id'] = $user['id'];
-        $recordList['cat_username'] = $user['id'];
+        $fullName = $profile['fullname'];
+        if (strpos($fullName, ",") === false) {
+            $profile['lastname'] = $fullName;
+            $profile['firstname'] = "";
+        } else {
+            list($profile['lastname'], $profile['firstname'])
+                = explode(",", $fullName);
+        }
+        $profile['id'] = $user['id'];
+        $profile['cat_username'] = $user['id'];
         $xml = $this->doRestDLFRequest(
             ['patron', $user['id'], 'patronStatus', 'registration']
         );
         $status = $xml->xpath("//institution/z305-bor-status");
         $expiry = $xml->xpath("//institution/z305-expiry-date");
-        $recordList['expire'] = $this->parseDate($expiry[0]);
-        $recordList['group'] = $status[0];
-        return $recordList;
+        $profile['expiration_date'] = $this->parseDate($expiry[0]);
+        $profile['group'] = $status[0];
+        return $profile;
     }
 
     /**
