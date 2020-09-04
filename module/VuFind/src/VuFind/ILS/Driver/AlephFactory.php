@@ -63,6 +63,7 @@ class AlephFactory extends DriverWithDateConverterFactory
         $options = [
             $container->get(\VuFind\Cache\Manager::class),
             $container->get('VuFind\Search'),
+            $container->get('Laminas\Mvc\I18n\Translator'),
         ];
         return parent::__invoke(
             $container,
@@ -70,4 +71,5 @@ class AlephFactory extends DriverWithDateConverterFactory
             $options
         );
     }
+
 }

@@ -365,17 +365,34 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     protected $addressMappings = null;
 
     /**
+     *
+     * @var \Laminas\I18n\Translator\TranslatorInterface|null
+     */
+    protected $translator = null;
+
+    /**
+     *
+     * @var array
+     */
+    protected $languages = [
+        'cs' => 'cze',
+        'en' => 'eng'
+    ];
+
+    /**
      * Constructor
      *
      * @param \VuFind\Date\Converter $dateConverter Date converter
      * @param \VuFind\Cache\Manager  $cacheManager  Cache manager (optional)
      */
     public function __construct(\VuFind\Date\Converter $dateConverter,
-        \VuFind\Cache\Manager $cacheManager = null, \VuFindSearch\Service $searchService
+        \VuFind\Cache\Manager $cacheManager = null, \VuFindSearch\Service $searchService,
+        \Laminas\I18n\Translator\TranslatorInterface $translator
     ) {
         $this->dateConverter = $dateConverter;
         $this->cacheManager = $cacheManager;
         $this->searchService = $searchService;
+        $this->translator = $translator;
     }
 
     /**
@@ -466,6 +483,12 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $this->idResolver = new FixedIdResolver();
         }
 
+        if (isset($this->config['Languages'])) {
+            foreach ($this->config['Languages'] as $locale => $lang) {
+                $this->languages[$locale] = $lang;
+            }
+        }
+
         $this->addressMappings = $this->getDefaultAddressMappings();
 
         if (isset($this->config['AddressMappings'])) {
@@ -546,6 +569,15 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $url = "http://$this->host:$this->dlfport/rest-dlf/" . $path;
         } else {
             $url = $this->dlfbaseurl . $path;
+        }
+        if ($params == null) {
+            $params = [];
+        }
+        if (!empty($this->languages)) {
+            $locale = $this->translator->getLocale();
+            if (isset($this->languages[$locale])) {
+                $params['lang'] = $this->languages[$locale];
+            }
         }
         $url = $this->appendQueryString($url, $params);
         $result = $this->doHTTPRequest($url, $method, $body);
