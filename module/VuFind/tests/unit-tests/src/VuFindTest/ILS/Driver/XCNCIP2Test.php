@@ -53,6 +53,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         $this->driver = new XCNCIP2(new \VuFind\Date\Converter());
     }
 
+    /**
+     * Test definition for testGetMyTransactions
+     *
+     * @var array[]
+     */
     protected $transactionsTests = [
         [
             'file' => [
@@ -132,6 +137,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testGetMyFines
+     *
+     * @var array[]
+     */
     protected $finesTests = [
         [
             'file' => 'lookupUserResponse.xml',
@@ -163,6 +173,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testPatronLogin
+     *
+     * @var array[]
+     */
     protected $loginTests = [
         [
             'file' => 'lookupUserResponse.xml',
@@ -194,6 +209,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testGetMyHolds
+     *
+     * @var array[]
+     */
     protected $holdsTests = [
         [
             'file' => 'lookupUserResponse.xml',
@@ -202,21 +222,28 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
                     'id' => '111',
                     'title' => 'Ahoj, Blanko! : dívčí román / Eva Bernardinová',
                     'item_id' => 'MZK01000353880-MZK50000353880000040',
-                    'create' => '',
+                    'create' => '10-10-2014',
                     'expire' => null,
                     'position' => null,
                     'requestId' => null,
                     'location' => 'Loan Department - Ground floor',
+                    'item_agency_id' => null,
+                    'canceled' => false,
+                    'available' => false,
+
                 ],
                 [
                     'id' => '112',
                     'title' => 'Aktiv revizních techniků elektrických zařízení',
                     'item_id' => 'MZK01000065021-MZK50000065021000010',
-                    'create' => '',
+                    'create' => '10-23-2014',
                     'expire' => null,
                     'position' => null,
                     'requestId' => null,
                     'location' => 'Loan Department - Ground floor',
+                    'item_agency_id' => null,
+                    'canceled' => false,
+                    'available' => false,
                 ],
             ],
         ],
@@ -227,26 +254,38 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
                     'id' => '111',
                     'title' => 'Ahoj, Blanko! : dívčí román / Eva Bernardinová',
                     'item_id' => 'MZK01000353880-MZK50000353880000040',
-                    'create' => '',
+                    'create' => '10-10-2014',
                     'expire' => null,
                     'position' => null,
                     'requestId' => null,
                     'location' => 'Loan Department - Ground floor',
+                    'item_agency_id' => null,
+                    'canceled' => false,
+                    'available' => false,
+
                 ],
                 [
                     'id' => '112',
                     'title' => 'Aktiv revizních techniků elektrických zařízení',
                     'item_id' => 'MZK01000065021-MZK50000065021000010',
-                    'create' => '',
+                    'create' => '10-23-2014',
                     'expire' => null,
                     'position' => null,
                     'requestId' => null,
                     'location' => 'Loan Department - Ground floor',
+                    'item_agency_id' => null,
+                    'canceled' => false,
+                    'available' => false,
                 ],
             ],
         ],
     ];
 
+    /**
+     * Test definition for testGetMyProfile
+     *
+     * @var array[]
+     */
     protected $profileTests = [
         [
             'file' => 'lookupUserResponse.xml',
@@ -274,6 +313,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testGetMyStorageRetrievalRequests
+     *
+     * @var array[]
+     */
     protected $storageRetrievalTests = [
         [
             'file' => 'lookupUserResponse.xml',
@@ -288,7 +332,8 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
                     'location' => 'Loan Department - Ground floor',
                     'item_agency_id' => null,
                     'canceled' => false,
-                    'processed' => false,
+                    'item_id' => 'MZK01001333770-MZK50001370317000020',
+                    'available' => false,
                 ],
             ],
         ],
@@ -305,12 +350,18 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
                     'location' => 'Loan Department - Ground floor',
                     'item_agency_id' => null,
                     'canceled' => false,
-                    'processed' => false,
+                    'item_id' => 'MZK01001333770-MZK50001370317000020',
+                    'available' => false,
                 ],
             ],
         ],
     ];
 
+    /**
+     * Test definition for testGetStatuses
+     *
+     * @var array[]
+     */
     protected $statusesTests = [
         [
             'file' => 'lookupItemSet.xml',
@@ -401,6 +452,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testGetHolding
+     *
+     * @var array[]
+     */
     protected $holdingTests = [
         [
             'file' => 'lookupItemSet.xml',
@@ -494,6 +550,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testPlaceHold
+     *
+     * @var array[]
+     */
     protected $placeHoldTests = [
         [
             'file' => 'RequestItemResponseAcceptedWithItemId.xml',
@@ -539,6 +600,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testPlaceStorageRetrievalRequest
+     *
+     * @var array[]
+     */
     protected $placeStorageRetrievalRequestTests = [
         [
             'file' => 'RequestItemResponseAcceptedWithItemId.xml',
@@ -584,6 +650,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testCancelHolds
+     *
+     * @var array[]
+     */
     protected $cancelHoldsTests = [
         [
             'file' => 'CancelRequestItemResponseAccepted.xml',
@@ -623,6 +694,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         ],
     ];
 
+    /**
+     * Test definition for testCancelStorageRetrievalRequests
+     *
+     * @var array[]
+     */
     protected $cancelStorageRetrievalTests = [
         [
             'file' => 'CancelRequestItemResponseAccepted.xml',
@@ -661,6 +737,12 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
             ],
         ],
     ];
+
+    /**
+     * Test definition for testRenewMyItems
+     *
+     * @var array[]
+     */
     protected $renewMyItemsTests = [
         [
             'file' => 'RenewItemResponseAccepted.xml',
@@ -831,6 +913,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         }
     }
 
+    /**
+     * Test getStatuses
+     *
+     * @return void
+     */
     public function testGetStatuses()
     {
         $this->configureDriver();
@@ -841,6 +928,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         }
     }
 
+    /**
+     * Test getHolding
+     *
+     * @return void
+     */
     public function testGetHolding()
     {
         $this->configureDriver();
@@ -851,6 +943,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         }
     }
 
+    /**
+     * Test getPickUpLocations
+     *
+     * @return void
+     */
     public function testGetPickupLocations()
     {
         // Test reading pickup locations from file
@@ -1041,6 +1138,11 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
         }
     }
 
+    /**
+     * Test definition for testGetRequestMethods
+     *
+     * @var array[]
+     */
     protected $requestTests = [
         '1' => [
             'method' => 'getStatusRequest',
@@ -1120,7 +1222,7 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
     ];
 
     /**
-     * Test getStatusRequest
+     * Test methods for creating NCIP requests
      *
      * @return void
      */
@@ -1203,7 +1305,7 @@ class XCNCIP2Test extends \VuFindTest\Unit\ILSDriverTestCase
             'Catalog' => [
                 'url' => 'https://test.ncip.example',
                 'consortium' => false,
-                'agency' => ['Test agency'],
+                'agency' => 'Test agency',
                 'pickupLocationsFile' => 'XCNCIP2_locations.txt',
             ],
             'NCIP' => [],

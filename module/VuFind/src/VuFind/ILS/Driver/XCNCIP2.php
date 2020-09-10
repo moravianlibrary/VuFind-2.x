@@ -104,6 +104,27 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
     protected $activeRequestStatuses = ['available for pickup', 'in process'];
 
     /**
+     * Lowercased status string for requests available for pickup by patron
+     *
+     * @var string
+     */
+    protected $requestAvailableStatus = 'available for pickup';
+
+    /**
+     * Lowercased request type strings identifying holds
+     *
+     * @var string[]
+     */
+    protected $holdRequestTypes = ['hold', 'recall'];
+
+    /**
+     * Lowercased request type strings identifying storage retrievals
+     *
+     * @var string[]
+     */
+    protected $storageRetrievalRequestTypes = ['stack retrieval'];
+
+    /**
      * Constructor
      *
      * @param \VuFind\Date\Converter $dateConverter Date converter object
@@ -211,7 +232,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         $return = [];
 
         $agencyId = $response->xpath('ns1:LookupAgencyResponse/ns1:AgencyId');
-        $agencyId = !empty($agencyId) ? (string)$agencyId[0] : '';
+        $agencyId = (string)($agencyId[0] ?? '');
         $locations = $response->xpath(
             'ns1:LookupAgencyResponse/ns1:Ext/ns1:LocationName/' .
             'ns1:LocationNameInstance'
@@ -250,7 +271,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
                 ? $this->config['Catalog']['http_timeout'] : 30;
             $client->setOptions(['timeout' => $timeout]);
             $client->setRawBody($xml);
-            $client->setEncType('application/xml; "charset=utf-8"');
+            $client->setEncType('application/xml; charset=UTF-8');
             $result = $client->setMethod('POST')->send();
         } catch (\Exception $e) {
             throw new ILSException($e->getMessage());
@@ -295,7 +316,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         $status = $current->xpath(
             'ns1:ItemOptionalFields/ns1:CirculationStatus'
         );
-        $status = empty($status) ? '' : (string)$status[0];
+        $status = (string)($status[0] ?? '');
 
         $itemCallNo = $current->xpath(
             'ns1:ItemOptionalFields/ns1:ItemDescription/ns1:CallNumber'
@@ -341,11 +362,11 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         $status = $current->xpath(
             'ns1:ItemOptionalFields/ns1:CirculationStatus'
         );
-        $status = empty($status) ? '' : (string)$status[0];
+        $status = (string)($status[0] ?? '');
 
         $itemId = $current->xpath('ns1:ItemId/ns1:ItemIdentifierValue');
         $itemType = $current->xpath('ns1:ItemId/ns1:ItemIdentifierType');
-        $itemType = !empty($itemType) ? (string)$itemType[0] : '';
+        $itemType = (string)($itemType[0] ?? '');
 
         $itemAgencyId = $current->xpath('ns1:ItemId/ns1:AgencyId');
 
@@ -373,19 +394,19 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         $itemCallNo = $current->xpath(
             'ns1:ItemOptionalFields/ns1:ItemDescription/ns1:CallNumber'
         );
-        $itemCallNo = !empty($itemCallNo) ? (string)$itemCallNo[0] : '';
+        $itemCallNo = (string)($itemCallNo[0] ?? '');
 
         $number = $current->xpath(
             'ns1:ItemOptionalFields/ns1:ItemDescription/' .
             'ns1:CopyNumber'
         );
-        $number = !empty($number) ? (string)$number[0] : '';
+        $number = (string)($number[0] ?? '');
 
         $volume = $current->xpath(
             'ns1:ItemOptionalFields/ns1:ItemDescription/' .
             'ns1:HoldingsInformation/ns1:UnstructuredHoldingsData'
         );
-        $volume = !empty($volume) ? (string)$volume[0] : '';
+        $volume = (string)($volume[0] ?? '');
 
         // Build return array:
         $return = [
@@ -394,8 +415,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
             'status' => $status,
             'item_id' => (string)$itemId[0],
             'bib_id' => $bibId,
-            'item_agency_id' => !empty($itemAgencyId)
-                ? (string)$itemAgencyId[0] : '',
+            'item_agency_id' => (string)($itemAgencyId[0] ?? ''),
             'location' => $location,
             'reserve' => 'N',       // not supported
             'callnumber' => $itemCallNo,
@@ -605,7 +625,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         if (null !== $ids) {
             foreach ($ids as $id) {
                 // Need to parse out the 035$a format, e.g., "(Agency) 123"
-                if (preg_match('/\(([^\)]+)\)\s*([0-9]+)/', $id, $matches)) {
+                if (preg_match('/\(([^\)]+)\)\s*(.+)/', $id, $matches)) {
                     $matchedAgency = $matches[1];
                     $matchedId = $matches[2];
                     if (array_key_exists($matchedAgency, $this->agency)) {
@@ -625,6 +645,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
         );
 
         foreach ($bibs as $bib) {
+            $this->registerNamespaceFor($bib);
             $bibIds = $bib->xpath(
                 'ns1:BibliographicId/ns1:BibliographicRecordId/' .
                 'ns1:BibliographicRecordIdentifier' .
@@ -636,13 +657,14 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
 
             $holdingSets = $bib->xpath('ns1:HoldingsSet');
             foreach ($holdingSets as $holding) {
+                $this->registerNamespaceFor($holding);
                 $holdCallNo = $holding->xpath('ns1:CallNumber');
-                $holdCallNo = !empty($holdCallNo) ? (string)$holdCallNo[0] : '';
+                $holdCallNo = (string)($holdCallNo[0] ?? '');
                 $avail = $holding->xpath('ns1:ItemInformation');
                 $eResource = $holding->xpath(
                     'ns1:ElectronicResource/ns1:ReferenceToResource'
                 );
-                $eResource = !empty($eResource) ? (string)$eResource[0] : '';
+                $eResource = (string)($eResource[0] ?? '');
                 $holdingLocation = $holding->xpath(
                     'ns1:Location/ns1:LocationName/ns1:LocationNameInstance/' .
                     'ns1:LocationNameValue'
@@ -945,7 +967,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
                 'ns1:BibliographicDescription/ns1:BibliographicItemId/' .
                 'ns1:BibliographicItemIdentifier'
             );
-            $id = !empty($bibId) ? (string)$bibId[0] : '';
+            $id = (string)($bibId[0] ?? '');
             $fines[] = [
                 'amount' => $amount,
                 'balance' => $amount,
@@ -957,6 +979,85 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
             ];
         }
         return $fines;
+    }
+
+    /**
+     * Get Patron requests by type
+     *
+     * This is responsible for retrieving all holds by a specific patron.
+     *
+     * @param array $patron The patron array from patronLogin
+     * @param array $types  Request types
+     *
+     * @throws VuFind\Date\DateException;
+     * @throws ILSException
+     * @return array        Array of the patron's holds on success.
+     */
+    protected function getMyRequests(array $patron, array $types)
+    {
+        $extras = ['<ns1:RequestedItemsDesired/>'];
+        $request = $this->getLookupUserRequest(
+            $patron['cat_username'], $patron['cat_password'],
+            $patron['patronAgencyId'], $extras
+        );
+        $response = $this->sendRequest($request);
+        $this->checkResponseForError($response);
+
+        $retVal = [];
+        $requests = $response->xpath('ns1:LookupUserResponse/ns1:RequestedItem');
+
+        foreach ($requests as $current) {
+            $this->registerNamespaceFor($current);
+            $id = $current->xpath(
+                'ns1:Ext/ns1:BibliographicDescription/' .
+                'ns1:BibliographicRecordId/ns1:BibliographicRecordIdentifier' .
+                ' | ' .
+                'ns1:Ext/ns1:BibliographicDescription/' .
+                'ns1:BibliographicItemId/ns1:BibliographicItemIdentifier'
+            );
+            $itemAgencyId = $current->xpath(
+                'ns1:Ext/ns1:BibliographicDescription/' .
+                'ns1:BibliographicRecordId/ns1:AgencyId'
+            );
+
+            $title = $current->xpath('ns1:Title');
+            $pos = $current->xpath('ns1:HoldQueuePosition');
+            $requestId = $current->xpath('ns1:RequestId/ns1:RequestIdentifierValue');
+            $itemId = $current->xpath('ns1:ItemId/ns1:ItemIdentifierValue');
+            $pickupLocation = $current->xpath('ns1:PickupLocation');
+            $created = $current->xpath('ns1:DatePlaced');
+            $created = $this->displayDate(
+                !empty($created) ? (string)$created[0] : null
+            );
+            $expireDate = $current->xpath('ns1:PickupExpiryDate');
+            $expireDate = $this->displayDate(
+                !empty($expireDate) ? (string)$expireDate[0] : null
+            );
+
+            $requestStatusType = $current->xpath('ns1:RequestStatusType');
+            $status = !empty($requestStatusType) ? (string)$requestStatusType[0]
+                : null;
+            $available = strtolower($status) === $this->requestAvailableStatus;
+
+            // Only return requests of desired type
+            if ($this->checkRequestType($current, $types)) {
+                $retVal[] = [
+                    'id' => (string)$id[0],
+                    'create' => $created,
+                    'expire' => $expireDate,
+                    'title' => (string)$title[0],
+                    'position' => !empty($pos) ? (string)$pos[0] : null,
+                    'requestId' => !empty($requestId) ? (string)$requestId[0] : null,
+                    'item_agency_id' => !empty($itemAgencyId)
+                        ? (string)$itemAgencyId[0] : null,
+                    'canceled' => $this->isRequestCancelled($status),
+                    'item_id' => (string)$itemId[0],
+                    'location' => (string)$pickupLocation[0],
+                    'available' => $available,
+                ];
+            }
+        }
+        return $retVal;
     }
 
     /**
@@ -972,51 +1073,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
      */
     public function getMyHolds($patron)
     {
-        $extras = ['<ns1:RequestedItemsDesired/>'];
-        $request = $this->getLookupUserRequest(
-            $patron['cat_username'], $patron['cat_password'],
-            $patron['patronAgencyId'], $extras
-        );
-        $response = $this->sendRequest($request);
-        $this->checkResponseForError($response);
-
-        $retVal = [];
-        $list = $response->xpath('ns1:LookupUserResponse/ns1:RequestedItem');
-        foreach ($list as $current) {
-            $this->registerNamespaceFor($current);
-            $id = $current->xpath(
-                'ns1:Ext/ns1:BibliographicDescription/' .
-                'ns1:BibliographicRecordId/ns1:BibliographicRecordIdentifier'
-            );
-            // (unused variable): $created = $current->xpath('ns1:DatePlaced');
-            $title = $current->xpath('ns1:Title');
-            $pos = $current->xpath('ns1:HoldQueuePosition');
-            $requestType = $current->xpath('ns1:RequestType');
-            $requestId = $current->xpath('ns1:RequestId/ns1:RequestIdentifierValue');
-            $itemId = $current->xpath('ns1:ItemId/ns1:ItemIdentifierValue');
-            $pickupLocation = $current->xpath('ns1:PickupLocation');
-            $expireDate = $current->xpath('ns1:PickupExpiryDate');
-            $expireDate = $this->displayDate(
-                !empty($expireDate) ? (string)$expireDate[0] : null
-            );
-            $requestType = (string)$requestType[0];
-            // Only return requests of type Hold or Recall. Callslips/Stack
-            // Retrieval requests are fetched using getMyStorageRetrievalRequests
-            if ($requestType === "Hold" or $requestType === "Recall") {
-                $retVal[] = [
-                    'id' => (string)$id[0],
-                    'create' => '',
-                    'expire' => $expireDate,
-                    'title' => (string)$title[0],
-                    'position' => !empty($pos) ? (string)$pos[0] : null,
-                    'requestId' => !empty($requestId) ? (string)$requestId[0] : null,
-                    'item_id' => (string)$itemId[0],
-                    'location' => (string)$pickupLocation[0],
-                ];
-            }
-        }
-
-        return $retVal;
+        return $this->getMyRequests($patron, $this->holdRequestTypes);
     }
 
     /**
@@ -1283,64 +1340,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
      */
     public function getMyStorageRetrievalRequests($patron)
     {
-        $extras = ['<ns1:RequestedItemsDesired/>'];
-        $request = $this->getLookupUserRequest(
-            $patron['cat_username'], $patron['cat_password'],
-            $patron['patronAgencyId'], $extras
-        );
-        $response = $this->sendRequest($request);
-        $this->checkResponseForError($response);
-
-        $retVal = [];
-        $list = $response->xpath('ns1:LookupUserResponse/ns1:RequestedItem');
-        foreach ($list as $current) {
-            $this->registerNamespaceFor($current);
-            $id = $current->xpath(
-                'ns1:Ext/ns1:BibliographicDescription/' .
-                'ns1:BibliographicRecordId/ns1:BibliographicRecordIdentifier'
-            );
-            $itemAgencyId = $current->xpath(
-                'ns1:Ext/ns1:BibliographicDescription/' .
-                'ns1:BibliographicRecordId/ns1:AgencyId'
-            );
-            $title = $current->xpath('ns1:Title');
-            $pos = $current->xpath('ns1:HoldQueuePosition');
-            $pickupLocation = $current->xpath('ns1:PickupLocation');
-            $requestId = $current->xpath('ns1:RequestId/ns1:RequestIdentifierValue');
-            $requestType = $current->xpath('ns1:RequestType');
-            $requestType = (string)$requestType[0];
-            $created = $current->xpath('ns1:DatePlaced');
-            $created = $this->displayDate(
-                !empty($created) ? (string)$created[0] : null
-            );
-            $requestStatusType = $current->xpath('ns1:RequestStatusType');
-            $status = !empty($requestStatusType) ? (string)$requestStatusType[0]
-                : null;
-
-            $processed = false;
-            if ($status === 'Available For Pickup') {
-                $processed = true;
-            }
-            // Only return requests of type Stack Retrieval/Callslip. Hold
-            // and Recall requests are fetched using getMyHolds
-            if ($requestType === 'Stack Retrieval') {
-                $retVal[] = [
-                    'id' => (string)$id[0],
-                    'create' => $created,
-                    'expire' => null,
-                    'title' => (string)$title[0],
-                    'position' => !empty($pos) ? (string)$pos[0] : null,
-                    'requestId' => !empty($requestId) ? (string)$requestId[0] : null,
-                    'item_agency_id' => !empty($itemAgencyId)
-                        ? (string)$itemAgencyId[0] : null,
-                    'canceled' => $this->isRequestCancelled($status),
-                    'location' => (string)$pickupLocation[0],
-                    'processed' => $processed,
-                ];
-            }
-        }
-
-        return $retVal;
+        return $this->getMyRequests($patron, $this->storageRetrievalRequestTypes);
     }
 
     /**
@@ -2045,7 +2045,7 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
     /**
      * Throw an exception if an NCIP error is found
      *
-     * @param XML $response from NCIP call
+     * @param \SimpleXMLElement $response from NCIP call
      *
      * @throws ILSException
      * @return void
@@ -2162,6 +2162,21 @@ class XCNCIP2 extends AbstractBase implements \VuFindHttp\HttpServiceAwareInterf
     protected function isRequestCancelled(string $status)
     {
         return !in_array(strtolower($status), $this->activeRequestStatuses);
+    }
+
+    /**
+     * Is request of desired type?
+     *
+     * @param \SimpleXMLElement $request RequestedItem NCIP Element
+     * @param array             $types   Array of types to check against
+     *
+     * @return bool Return true if request is of desired type
+     */
+    protected function checkRequestType(\SimpleXMLElement $request, array $types)
+    {
+        $requestType = $request->xpath('ns1:RequestType');
+        $requestType = (string)$requestType[0];
+        return in_array(strtolower($requestType), $types);
     }
 
     /**
