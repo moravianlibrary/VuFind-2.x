@@ -462,7 +462,7 @@ class Folio extends AbstractAPI implements
         $instance = $this->getInstanceByBibId($bibId);
         $query = [
             'query' => '(instanceId=="' . $instance->id
-                . '" and discoverySuppress==false)'
+                . '" NOT discoverySuppress==true)'
         ];
         $holdingResponse = $this->makeRequest(
             'GET',
@@ -477,17 +477,41 @@ class Folio extends AbstractAPI implements
 
             $query = [
                 'query' => '(holdingsRecordId=="' . $holding->id
-                    . '" and discoverySuppress==false)'
+                    . '" NOT discoverySuppress==true)'
             ];
             $itemResponse = $this->makeRequest('GET', '/item-storage/items', $query);
             $itemBody = json_decode($itemResponse->getBody());
             $notesFormatter = function ($note) {
-                return $note->note ?? '';
+                return !($note->staffOnly ?? false)
+                    && !empty($note->note) ? $note->note : '';
             };
+            $textFormatter = function ($supplement) {
+                $format = '%s %s';
+                $supStat = $supplement->statement;
+                $supNote = $supplement->note;
+                $statement = trim(sprintf($format, $supStat, $supNote));
+                return $statement ?? '';
+            };
+            $holdingNotes = array_filter(
+                array_map($notesFormatter, $holding->notes ?? [])
+            );
+            $hasHoldingNotes = !empty(implode($holdingNotes));
+            $holdingsStatements = array_map(
+                $textFormatter,
+                $holding->holdingsStatements ?? []
+            );
+            $holdingsSupplements = array_map(
+                $textFormatter,
+                $holding->holdingsStatementsForSupplements ?? []
+            );
+            $holdingsIndexes = array_map(
+                $textFormatter,
+                $holding->holdingsStatementsForIndexes ?? []
+            );
             foreach ($itemBody->items as $item) {
-                if ($item->discoverySuppress ?? false) {
-                    continue;
-                }
+                $itemNotes = array_filter(
+                    array_map($notesFormatter, $item->notes ?? [])
+                );
                 $items[] = [
                     'id' => $bibId,
                     'item_id' => $item->id,
@@ -497,7 +521,11 @@ class Folio extends AbstractAPI implements
                     'status' => $item->status->name,
                     'availability' => $item->status->name == 'Available',
                     'is_holdable' => $this->isHoldable($locationName),
-                    'notes' => array_map($notesFormatter, $item->notes ?? []),
+                    'holdings_notes'=> $hasHoldingNotes ? $holdingNotes : null,
+                    'item_notes' => !empty(implode($itemNotes)) ? $itemNotes : null,
+                    'issues' => $holdingsStatements,
+                    'supplements' => $holdingsSupplements,
+                    'indexes' => $holdingsIndexes,
                     'callnumber' => $holding->callNumber ?? '',
                     'location' => $locationName,
                     'reserve' => 'TODO',
