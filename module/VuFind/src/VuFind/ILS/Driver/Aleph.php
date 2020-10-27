@@ -937,7 +937,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 'collection_desc'   => (string)$collection_desc['desc'],
                 'callnumber_second' => (string)$z30->{'z30-call-no-2'},
                 'sub_lib_desc'      => (string)$item_status['sub_lib_desc'],
-                'no_of_loans'       => (string)$z30->{'$no_of_loans'},
+                'no_of_loans'       => (string)$z30->{'no_of_loans'},
                 'requested'         => (string)$requested
             ];
         }
