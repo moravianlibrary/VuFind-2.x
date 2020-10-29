@@ -887,7 +887,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             }
             $matches = [];
             $dueDateWithStatusRegEx = "/([0-9]*\\/[a-zA-Z]*\\/[0-9]*);([a-zA-Z ]*)/";
-            $dueDateRegEx = "/([0-9]*\\/[a-zA-Z]*\\/[0-9]*)/";
+            $dueDateRegEx = "/([0-9]*\\/[a-zA-Z0-9]*\\/[0-9]*)/";
             if (preg_match($dueDateWithStatusRegEx, $status, $matches)) {
                 $duedate = $this->parseDate($matches[1]);
                 $requested = (trim($matches[2]) == "Requested");
@@ -895,23 +895,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 $duedate = $this->parseDate($matches[1]);
             } else {
                 $duedate = null;
-            }
-            // process duedate
-            if ($availability) {
-                if ($this->duedates) {
-                    foreach ($this->duedates as $key => $value) {
-                        if (preg_match($value, $item_status['desc'])) {
-                            $duedate = $key;
-                            break;
-                        }
-                    }
-                } else {
-                    $duedate = $item_status['desc'];
-                }
-            } else {
-                if ($status == "On Hold" || $status == "Requested") {
-                    $duedate = "requested";
-                }
             }
             $item_id = $item->attributes()->href;
             $item_id = substr($item_id, strrpos($item_id, '/') + 1);
