@@ -59,12 +59,6 @@ class Shibboleth extends AbstractBase
     const DEFAULT_IDPSERVERPARAM = 'Shib-Identity-Provider';
 
     /**
-     * Header name of the internal session key assigned to the
-     * session associated with the request.
-     */
-    const SHIB_SESSION_ID = "Shib-Session-ID";
-
-    /**
      * This is array of attributes which $this->authenticate()
      * method should check for.
      *
@@ -92,17 +86,66 @@ class Shibboleth extends AbstractBase
     protected $configurationLoader;
 
     /**
+     * Http Request object
+     *
+     * @var \Laminas\Http\PhpEnvironment\Request
+     */
+    protected $request;
+
+    /**
+     * Read attributes from headers instead of environment variables
+     *
+     * @var boolean
+     */
+    protected $useHeaders = false;
+
+    /**
+     * Name of attribute with shibboleth identity provider
+     *
+     * @var string
+     */
+    protected $shibIdentityProvider = self::DEFAULT_IDPSERVERPARAM;
+
+    /**
+     * Name of attribute with shibboleth session ID
+     *
+     * @var string
+     */
+    protected $shibSessionId = null;
+
+    /**
      * Constructor
      *
-     * @param \Laminas\Session\ManagerInterface $sessionManager      Session manager
-     * @param ConfigurationLoaderInterface      $configurationLoader Configuration
+     * @param \Laminas\Session\ManagerInterface    $sessionManager      Session
+     * manager
+     * @param ConfigurationLoaderInterface         $configurationLoader Configuration
      * loader
+     * @param \Laminas\Http\PhpEnvironment\Request $request             Http
+     * request object
      */
     public function __construct(\Laminas\Session\ManagerInterface $sessionManager,
-        ConfigurationLoaderInterface $configurationLoader
+        ConfigurationLoaderInterface $configurationLoader,
+        \Laminas\Http\PhpEnvironment\Request $request
     ) {
         $this->sessionManager = $sessionManager;
         $this->configurationLoader = $configurationLoader;
+        $this->request = $request;
+    }
+
+    /**
+     * Set configuration.
+     *
+     * @param \Laminas\Config\Config $config Configuration to set
+     *
+     * @return void
+     */
+    public function setConfig($config)
+    {
+        parent::setConfig($config);
+        $this->useHeaders = $this->config->Shibboleth->use_headers ?? false;
+        $this->shibIdentityProvider = $this->config->Shibboleth->idpserverparam
+            ?? self::DEFAULT_IDPSERVERPARAM;
+        $this->shibSessionId = $this->config->Shibboleth->session_id ?? null;
     }
 
     /**
@@ -142,28 +185,30 @@ class Shibboleth extends AbstractBase
      */
     public function authenticate($request)
     {
+        // validate config before authentication
+        $this->validateConfig();
         // Check if username is set.
         $entityId = $this->getCurrentEntityId($request);
         $shib = $this->getConfigurationLoader()->getConfiguration($entityId);
         $username = $this->getAttribute($request, $shib['username']);
         if (empty($username)) {
+            $details = ($this->useHeaders) ? $request->getHeaders()->toArray()
+                : $request->getServer()->toArray();
             $this->debug(
                 "No username attribute ({$shib['username']}) present in request: "
-                . print_r($request->getServer()->toArray(), true)
+                . print_r($details, true)
             );
             throw new AuthException('authentication_error_admin');
         }
 
         // Check if required attributes match up:
         foreach ($this->getRequiredAttributes($shib) as $key => $value) {
-            if (!preg_match(
-                '/' . $value . '/',
-                $this->getAttribute($request, $key)
-            )
-            ) {
+            if (!preg_match("/$value/", $this->getAttribute($request, $key))) {
+                $details = ($this->useHeaders) ? $request->getHeaders()->toArray()
+                    : $request->getServer()->toArray();
                 $this->debug(
                     "Attribute '$key' does not match required value '$value' in"
-                    . ' request: ' . print_r($request->getServer()->toArray(), true)
+                    . ' request: ' . print_r($details, true)
                 );
                 throw new AuthException('authentication_error_denied');
             }
@@ -182,9 +227,10 @@ class Shibboleth extends AbstractBase
                 $value = $this->getAttribute($request, $shib[$attribute]);
                 if ($attribute == 'email') {
                     $user->updateEmail($value);
-                } elseif ($attribute == 'cat_username' && isset($shib['prefix'])) {
-                    $user->cat_username = $shib['prefix'] . '.'
-                        . (($value === null) ? '' : $value);
+                } elseif ($attribute == 'cat_username' && isset($shib['prefix'])
+                    && !empty($value)
+                ) {
+                    $user->cat_username = $shib['prefix'] . '.' . $value;
                 } elseif ($attribute == 'cat_password') {
                     $catPassword = $value;
                 } else {
@@ -268,9 +314,14 @@ class Shibboleth extends AbstractBase
      */
     public function isExpired()
     {
-        $proxy = $this->getConfig()->Shibboleth->proxy ?? false;
-        return ($proxy) ? isset($_SERVER[$this->normalize(self::SHIB_SESSION_ID)])
-            : isset($_ENV[self::SHIB_SESSION_ID]);
+        $config = $this->getConfig();
+        if (!isset($this->shibSessionId)
+            || !($config->Shibboleth->checkExpiredSession ?? true)
+        ) {
+            return false;
+        }
+        $sessionId = $this->getAttribute($this->request, $this->shibSessionId);
+        return !isset($sessionId);
     }
 
     /**
@@ -345,24 +396,20 @@ class Shibboleth extends AbstractBase
      * @param \Laminas\Http\PhpEnvironment\Request $request Request object containing
      * account credentials.
      *
-     * @return \VuFind\Db\Row\User Object representing logged-in user.
+     * @return void
      */
     protected function storeShibbolethSession($request)
     {
-        $shib = $this->getConfig()->Shibboleth;
-        if (!isset($shib['session_id'])) {
+        if (!isset($this->shibSessionId)) {
             return;
         }
-        $shibSessionId = $this->getAttribute($request, $shib['session_id']);
+        $shibSessionId = $this->getAttribute($request, $this->shibSessionId);
         if (null === $shibSessionId) {
             return;
         }
         $localSessionId = $this->sessionManager->getId();
-        $externalSession = $this->getDbTableManager()
-            ->get('ExternalSession');
-        $externalSession->addSessionMapping(
-            $localSessionId, $shibSessionId
-        );
+        $externalSession = $this->getDbTableManager()->get('ExternalSession');
+        $externalSession->addSessionMapping($localSessionId, $shibSessionId);
         $this->debug(
             "Cached Shibboleth session id '$shibSessionId' for local session"
             . " '$localSessionId'"
@@ -378,7 +425,7 @@ class Shibboleth extends AbstractBase
      */
     protected function getCurrentEntityId($request)
     {
-        return $this->getAttribute($request, static::DEFAULT_IDPSERVERPARAM);
+        return $this->getAttribute($request, $this->shibIdentityProvider);
     }
 
     /**
@@ -387,30 +434,15 @@ class Shibboleth extends AbstractBase
      * @param \Laminas\Http\PhpEnvironment\Request $request   Request object
      * @param string                               $attribute Attribute name
      *
-     * @throws AuthException
      * @return string attribute value
      */
     protected function getAttribute($request, $attribute)
     {
-        $proxy = $this->getConfig()->Shibboleth->proxy ?? false;
-        if ($proxy) {
-            $header = $request->getHeader($this->normalize($attribute));
+        if ($this->useHeaders) {
+            $header = $request->getHeader($attribute);
             return ($header) ? $header->getFieldValue() : null;
         } else {
-            return $request->getServer()->get($attribute) ?? null;
+            return $request->getServer()->get($attribute, null);
         }
-    }
-
-    /**
-     * Convert name of server environment variable to header name - used
-     * when shibboleth is behind proxy.
-     *
-     * @param string $attribute name of server environment variable
-     *
-     * @return string header name
-     */
-    protected function normalize($attribute)
-    {
-        return "HTTP_" . strtoupper(str_replace('-', '_', $attribute));
     }
 }
