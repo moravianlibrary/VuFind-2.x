@@ -81,7 +81,9 @@ class LibraryCardsController extends AbstractBase
         return $this->createViewModel(
             [
                 'libraryCards' => $user->getLibraryCards(),
-                'multipleTargets' => $catalog->checkCapability('getLoginDrivers')
+                'multipleTargets' => $catalog->checkCapability('getLoginDrivers'),
+                'shibboleth' => ($this->getAuthManager()
+                    ->getAuthMethod() == 'Shibboleth')
             ]
         );
     }
@@ -238,6 +240,35 @@ class LibraryCardsController extends AbstractBase
             return $this->redirect()->toUrl($this->adjustCardRedirectUrl($url));
         }
         return $this->redirect()->toRoute('myresearch-home');
+    }
+
+    /**
+     * Redirects to Shibboleth authentication to connect a new library card
+     *
+     * @return \Laminas\Http\Response
+     */
+    public function connectNewShibbolethCardAction()
+    {
+        $url = $this->getServerUrl('librarycards-connectshibbolethcard');
+        $redirectUrl = $this->getAuthManager()->getSessionInitiator($url);
+        return $this->redirect()->toUrl($redirectUrl);
+    }
+
+    /**
+     * Connects a new library card for shibboleth authenticated user
+     *
+     * @return \Laminas\Http\Response
+     */
+    public function connectShibbolethCardAction()
+    {
+        $user = $this->getUser();
+        try {
+            $this->getAuthManager()->connectUser($this->getRequest(), $user);
+        } catch (\Exception $ex) {
+            $this->flashMessenger()->setNamespace('error')
+                ->addMessage($ex->getMessage());
+        }
+        return $this->redirect()->toUrl('/LibraryCards/Home');
     }
 
     /**
