@@ -39,9 +39,6 @@ namespace VuFind\ILS\Driver;
 
 use VuFind\Date\DateException;
 use VuFind\Exception\ILS as ILSException;
-use VuFind\ILS\Driver\Aleph\IdResolver;
-use VuFind\ILS\Driver\Aleph\FixedIdResolver;
-use VuFind\ILS\Driver\Aleph\SolrIdResolver;
 
 /**
  * Aleph Translator Class
@@ -601,12 +598,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         }
         if (isset($this->config['Catalog']['default_patron_id'])) {
             $this->defaultPatronId = $this->config['Catalog']['default_patron_id'];
-        }
-        $idResolver = $this->config['IdResolver']['type'] ?? 'fixed';
-        if ($idResolver == 'solr') {
-            $this->idResolver = new SolrIdResolver($this->searchService, $this->config);
-        } else {
-            $this->idResolver = new FixedIdResolver();
         }
 
         if (isset($this->config['Languages'])) {
@@ -1222,7 +1213,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 //'create' => $this->parseDate($create)
             ];
         }
-        $this->idResolver->resolveIds($transList);
         return $transList;
     }
 
@@ -1351,7 +1341,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 ];
             }
         }
-        $this->idResolver->resolveIds($holdList);
         return $holdList;
     }
 
