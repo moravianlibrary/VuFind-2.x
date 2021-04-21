@@ -262,24 +262,6 @@ class Shibboleth extends AbstractBase
     }
 
     /**
-     * Connect user authenticated by shibboleth to library card.
-     *
-     * @param \Laminas\Http\PhpEnvironment\Request $request Request object containing
-     *        account credentials.
-     * @param \VuFind\Db\Row\User $connectingUser Connect newly created library card
-     *        to this user.
-     */
-    public function connectUser($request, $connectingUser)
-    {
-        $entityId = $this->getCurrentEntityId($request);
-        $shib = $this->getConfigurationLoader()->getConfiguration($entityId);
-        $username = $shib['prefix'] . '.' . $this->getAttribute($request,
-            $shib['cat_username']);
-        $password = $shib['cat_password'] ?? null;
-        $connectingUser->saveLibraryCard(null, $username, $username, $password);
-    }
-
-    /**
      * Get the URL to establish a session (needed when the internal VuFind login
      * form is inadequate).  Returns false when no session initiator is needed.
      *
