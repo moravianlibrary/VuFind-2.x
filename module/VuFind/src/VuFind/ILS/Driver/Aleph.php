@@ -37,6 +37,8 @@
  */
 namespace VuFind\ILS\Driver;
 
+use Laminas\I18n\Translator\TranslatorInterface;
+
 use VuFind\Date\DateException;
 use VuFind\Exception\ILS as ILSException;
 
@@ -337,13 +339,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     const RECORD_ID_BASE_SEPARATOR = '-';
 
     /**
-     * Duedate configuration
-     *
-     * @var array
-     */
-    protected $duedates = false;
-
-    /**
      * Translator object
      *
      * @var AlephTranslator
@@ -356,6 +351,13 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
      * @var \VuFind\Cache\Manager
      */
     protected $cacheManager;
+
+    /**
+     * Translator
+     *
+     * @var TranslatorInterface
+     */
+    protected $translator;
 
     /**
      * Date converter object
@@ -505,18 +507,26 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     protected $defaultPatronId;
 
     /**
+     * ISO 3166-1 alpha-2 to ISO 3166-1 alpha-3 mapping for
+     * translation in REST DLF API.
+     *
+     * @var array
+     */
+    protected $languages = [];
+
+    /**
      * Constructor
      *
      * @param \VuFind\Date\Converter $dateConverter Date converter
      * @param \VuFind\Cache\Manager  $cacheManager  Cache manager (optional)
+     * @param TranslatorInterface    $translator    Translator (optional)
      */
     public function __construct(\VuFind\Date\Converter $dateConverter,
-        \VuFind\Cache\Manager $cacheManager = null, \VuFindSearch\Service $searchService,
-        \Laminas\I18n\Translator\TranslatorInterface $translator
+        \VuFind\Cache\Manager $cacheManager = null,
+        TranslatorInterface $translator = null
     ) {
         $this->dateConverter = $dateConverter;
         $this->cacheManager = $cacheManager;
-        $this->searchService = $searchService;
         $this->translator = $translator;
     }
 
@@ -564,9 +574,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
             $this->dlfbaseurl = $this->config['Catalog']['dlfbaseurl'];
         }
         $this->sublibadm = $this->config['sublibadm'];
-        if (isset($this->config['duedates'])) {
-            $this->duedates = $this->config['duedates'];
-        }
         $this->available_statuses
             = explode(',', $this->config['Catalog']['available_statuses']);
         $this->quick_availability
@@ -690,7 +697,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         if ($params == null) {
             $params = [];
         }
-        if (!empty($this->languages)) {
+        if (!empty($this->languages) && $this->translator != null) {
             $locale = $this->translator->getLocale();
             if (isset($this->languages[$locale])) {
                 $params['lang'] = $this->languages[$locale];
@@ -1003,7 +1010,8 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 $addLink = ($hold_request[0] == 'Y');
             }
             $matches = [];
-            $dueDateWithStatusRegEx = "/([0-9]*\\/[a-zA-Z]*\\/[0-9]*);([a-zA-Z ]*)/";
+            $dueDateWithStatusRegEx
+                = "/([0-9]*\\/[a-zA-Z0-9]*\\/[0-9]*);([a-zA-Z ]*)/";
             $dueDateRegEx = "/([0-9]*\\/[a-zA-Z0-9]*\\/[0-9]*)/";
             if (preg_match($dueDateWithStatusRegEx, $status, $matches)) {
                 $duedate = $this->parseDate($matches[1]);
@@ -1347,11 +1355,14 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
     /**
      * Get Cancel Hold Details
      *
-     * @param array $holdDetails An array of item data
+     * @param array $holdDetails A single hold array from getMyHolds
+     * @param array $patron      Patron information from patronLogin
      *
      * @return string Data for use in a form field
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
-    public function getCancelHoldDetails($holdDetails)
+    public function getCancelHoldDetails($holdDetails, $patron = [])
     {
         if ($holdDetails['delete']) {
             return $holdDetails['item_id'];
@@ -1939,10 +1950,12 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
      *
      * @param array $patron   Patron information returned by the patronLogin method.
      * @param array $holdInfo Optional array, only passed in when getting a list
-     * in the context of placing a hold; contains most of the same values passed to
-     * placeHold, minus the patron data.  May be used to limit the pickup options
-     * or may be ignored.  The driver must not add new options to the return array
-     * based on this data or other areas of VuFind may behave incorrectly.
+     * in the context of placing or editing a hold.  When placing a hold, it contains
+     * most of the same values passed to placeHold, minus the patron data.  When
+     * editing a hold it contains all the hold information returned by getMyHolds.
+     * May be used to limit the pickup options or may be ignored.  The driver must
+     * not add new options to the return array based on this data or other areas of
+     * VuFind may behave incorrectly.
      *
      * @throws ILSException
      * @return array        An array of associative arrays with locationID and
