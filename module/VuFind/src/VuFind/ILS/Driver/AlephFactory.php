@@ -72,5 +72,4 @@ class AlephFactory extends DriverWithDateConverterFactory
             ]
         );
     }
-
 }
