@@ -375,30 +375,9 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
 
     /**
      *
-     * @var \VuFindSearch\Service
-     */
-    protected $searchService = null;
-
-    /**
-     *
      * @var array
      */
     protected $addressMappings = null;
-
-    /**
-     *
-     * @var \Laminas\I18n\Translator\TranslatorInterface|null
-     */
-    protected $translator = null;
-
-    /**
-     *
-     * @var array
-     */
-    protected $languages = [
-        'cs' => 'cze',
-        'en' => 'eng'
-    ];
 
     /**
      * Aleph server
@@ -606,7 +585,6 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
         if (isset($this->config['Catalog']['default_patron_id'])) {
             $this->defaultPatronId = $this->config['Catalog']['default_patron_id'];
         }
-
         if (isset($this->config['Languages'])) {
             foreach ($this->config['Languages'] as $locale => $lang) {
                 $this->languages[$locale] = $lang;
@@ -1221,6 +1199,7 @@ class Aleph extends AbstractBase implements \Laminas\Log\LoggerAwareInterface,
                 //'create' => $this->parseDate($create)
             ];
         }
+
         return $transList;
     }
 
